@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Star, Trophy, User, X } from "lucide-react";
+import { Star, Trophy, User, X } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import {
   Carousel,
@@ -13,8 +13,9 @@ import { DbChecker } from "@/types/checker";
 import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
+import { PaymentModal } from "./PaymentModal";
 
 interface CheckerDetailProps {
   checker: DbChecker | null;
@@ -37,7 +38,8 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
     });
   }, [api]);
   const navigate = useNavigate();
-  const { toast } = useToast();
+  // const { toast } = useToast(); // Removed to avoid conflict with sonner toast
+
 
   // Build images array: avatar first, then gallery
   const allImages = useMemo(() => {
@@ -60,12 +62,40 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
     ? Object.entries(checker.social_media).filter(([_, value]) => value)
     : [];
 
-  const nextImage = () => {
-    setCurrentImage((prev) => (prev + 1) % allImages.length);
-  };
 
-  const prevImage = () => {
-    setCurrentImage((prev) => (prev - 1 + allImages.length) % allImages.length);
+
+  const [booking, setBooking] = useState<{ id: string; status: string } | null>(null);
+
+  // Check for existing booking
+  useEffect(() => {
+    const checkBooking = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || !checker) return;
+
+      const { data } = await supabase
+        .from("bookings")
+        .select("id, status")
+        .eq("client_id", user.id)
+        .eq("checker_id", checker.id)
+        .maybeSingle();
+
+      if (data) {
+        setBooking(data);
+      }
+    };
+
+    if (isOpen) {
+      checkBooking();
+    }
+  }, [isOpen, checker]);
+
+  const [paymentOpen, setPaymentOpen] = useState(false);
+
+  const handlePaymentSuccess = () => {
+    // Payment successful, maybe refresh or navigate
+    toast({ title: "تم الدفع بنجاح", description: "جاري فتح المحادثة..." });
+    // TODO: Navigate to chat
+    // For now, assume chat creation logic will be here or handled
   };
 
   const handleRequestTest = async () => {
@@ -79,76 +109,68 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
       return;
     }
 
-    // Check if conversation already exists
-    const { data: existingConv } = await supabase
-      .from("conversations")
-      .select("id")
-      .eq("user_id", user.id)
-      .eq("checker_id", checker.id)
-      .single();
-
-    if (existingConv) {
-      navigate(`/chat/${existingConv.id}`);
-      onClose();
+    // If approved, proceed to payment
+    if (booking?.status === 'approved') {
+      setPaymentOpen(true);
       setLoading(false);
       return;
     }
 
-    // Create new conversation
-    const { data: newConv, error } = await supabase
-      .from("conversations")
+    // If pending, do nothing (should be disabled)
+    if (booking?.status === 'pending_approval') return;
+
+    // Create new booking
+    const { data: newBooking, error } = await supabase
+      .from("bookings")
       .insert({
-        user_id: user.id,
+        client_id: user.id,
         checker_id: checker.id,
+        status: "pending_approval",
+        price: checker.price || 0
       })
       .select()
       .single();
 
     if (error) {
-      toast({ title: "حدث خطأ", description: "فشل إنشاء المحادثة", variant: "destructive" });
-      setLoading(false);
-      return;
+      console.error(error);
+      toast({ title: "حدث خطأ", description: "فشل إنشاء الطلب", variant: "destructive" });
+    } else {
+      setBooking({ id: newBooking.id, status: newBooking.status });
+      toast({ title: "تم إرسال الطلب", description: "بانتظار موافقة المتحقق" });
     }
-
-    navigate(`/chat/${newConv.id}`);
-    onClose();
     setLoading(false);
   };
 
   return (
     <Sheet open={isOpen} onOpenChange={onClose}>
-      <SheetContent side="bottom" className="h-[95vh] p-0 rounded-t-3xl overflow-hidden">
+      <SheetContent side="bottom" className="h-[85vh] md:h-[90vh] p-0 rounded-t-3xl overflow-hidden">
         {/* Image Carousel */}
         <div className="relative h-[45%] bg-muted">
           {allImages.length > 0 ? (
-            <img
-              src={allImages[currentImage] || allImages[0]}
-              alt={checker.display_name}
-              className="w-full h-full object-cover"
-              loading="eager"
-            />
+            <Carousel className="w-full h-full" setApi={setApi}>
+              <CarouselContent className="h-full ml-0">
+                {allImages.map((src, index) => (
+                  <CarouselItem key={index} className="pl-0 h-full">
+                    <img
+                      src={src}
+                      alt={`${checker.display_name} - ${index + 1}`}
+                      className="w-full h-full object-cover"
+                      loading="eager"
+                    />
+                  </CarouselItem>
+                ))}
+              </CarouselContent>
+              {allImages.length > 1 && (
+                <>
+                  <CarouselPrevious className="absolute left-4 top-1/2 -translate-y-1/2 bg-black/50 border-white/20 text-white hover:bg-black/70 hover:text-white" />
+                  <CarouselNext className="absolute right-4 top-1/2 -translate-y-1/2 bg-black/50 border-white/20 text-white hover:bg-black/70 hover:text-white" />
+                </>
+              )}
+            </Carousel>
           ) : (
             <div className="w-full h-full bg-secondary flex items-center justify-center">
               <User className="w-24 h-24 text-muted-foreground" />
             </div>
-          )}
-
-          {/* Navigation Arrows */}
-          {allImages.length > 1 && (
-            <>
-              <button
-                onClick={prevImage}
-                className="absolute left-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-card/80 rounded-full flex items-center justify-center shadow-card"
-              >
-                <ChevronLeft className="w-6 h-6" />
-              </button>
-              <button
-                onClick={nextImage}
-                className="absolute right-4 top-1/2 -translate-y-1/2 w-10 h-10 bg-card/80 rounded-full flex items-center justify-center shadow-card"
-              >
-                <ChevronRight className="w-6 h-6" />
-              </button>
-            </>
           )}
 
           {/* Close Button */}
@@ -161,14 +183,13 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
 
           {/* Dots Indicator */}
           {allImages.length > 1 && (
-            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5">
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-1.5 z-10">
               {allImages.map((_, i) => (
-                <button
+                <div
                   key={i}
-                  onClick={() => setCurrentImage(i)}
                   className={cn(
                     "w-2 h-2 rounded-full transition-colors",
-                    i === currentImage ? "bg-card" : "bg-card/50"
+                    i === currentImage ? "bg-white" : "bg-white/50"
                   )}
                 />
               ))}
@@ -274,13 +295,34 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
           {/* CTA Button */}
           <Button
             onClick={handleRequestTest}
-            disabled={loading}
-            className="w-full py-6 bg-gradient-primary shadow-button text-lg font-semibold rounded-2xl"
+            disabled={loading || booking?.status === 'pending_approval' || booking?.status === 'rejected'}
+            className={cn(
+              "w-full py-6 text-lg font-semibold rounded-2xl shadow-button transition-all",
+              booking?.status === 'approved'
+                ? "bg-green-600 hover:bg-green-700 text-white"
+                : booking?.status === 'rejected'
+                  ? "bg-destructive/80 text-white cursor-not-allowed"
+                  : "bg-gradient-primary"
+            )}
           >
-            {loading ? "جاري التحميل..." : "Request a Loyalty Test"}
+            {loading ? "جاري التحميل..." :
+              booking?.status === 'pending_approval' ? "الطلب قيد الانتظار" :
+                booking?.status === 'approved' ? "متابعة للدفع (مقبول)" :
+                  booking?.status === 'rejected' ? "تم رفض الطلب" :
+                    "طلب اختبار الولاء"}
           </Button>
         </div>
       </SheetContent>
+
+      {booking && (
+        <PaymentModal
+          isOpen={paymentOpen}
+          onClose={() => setPaymentOpen(false)}
+          bookingId={booking.id}
+          price={checker.price || 0}
+          onPaymentSuccess={handlePaymentSuccess}
+        />
+      )}
     </Sheet>
   );
 };

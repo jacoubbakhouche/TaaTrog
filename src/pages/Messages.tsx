@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { User, MessageCircle } from "lucide-react";
-import BottomNav from "@/components/BottomNav";
+
 
 interface Conversation {
   id: string;
@@ -40,12 +40,28 @@ const Messages = () => {
       }
       setCurrentUserId(user.id);
 
-      // Fetch conversations with checker info
-      const { data: convs, error } = await supabase
+      // Check if user is a checker
+      const { data: checkerData } = await supabase
+        .from("checkers")
+        .select("id")
+        .eq("user_id", user.id)
+        .maybeSingle();
+
+      const checkerId = checkerData?.id;
+
+      // Build query: user is client OR user is checker
+      let query = supabase
         .from("conversations")
         .select("*, checkers(*)")
-        .or(`user_id.eq.${user.id},checker_id.in.(select id from checkers where user_id = '${user.id}')`)
         .order("updated_at", { ascending: false });
+
+      if (checkerId) {
+        query = query.or(`user_id.eq.${user.id},checker_id.eq.${checkerId}`);
+      } else {
+        query = query.eq("user_id", user.id);
+      }
+
+      const { data: convs, error } = await query;
 
       if (error) {
         console.error("Error fetching conversations:", error);
@@ -160,7 +176,7 @@ const Messages = () => {
         )}
       </div>
 
-      <BottomNav />
+
     </div>
   );
 };

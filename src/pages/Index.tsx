@@ -9,6 +9,7 @@ import BottomNav from "@/components/BottomNav";
 import Sidebar from "@/components/Sidebar";
 import FilterSheet from "@/components/FilterSheet";
 import CheckerDetail from "@/components/CheckerDetail";
+import { HeroSection } from "@/components/HeroSection";
 import { supabase } from "@/integrations/supabase/client";
 import { DbChecker } from "@/types/checker";
 
@@ -110,23 +111,9 @@ const Index = () => {
             <Menu className="w-6 h-6 text-foreground" />
           </button>
 
-          {/* Tabs */}
-          <div className="flex items-center gap-2 bg-secondary rounded-full p-1">
-            <Button
-              variant="ghost"
-              className="rounded-full px-4 py-2 h-auto text-sm font-semibold bg-card shadow-sm"
-            >
-              Loyalty Test
-            </Button>
-            <Button
-              variant="ghost"
-              className="rounded-full px-4 py-2 h-auto text-sm font-medium text-muted-foreground"
-            >
-              P.I.
-              <span className="ml-1 bg-destructive text-destructive-foreground text-[10px] px-1.5 py-0.5 rounded font-bold">
-                NEW
-              </span>
-            </Button>
+          {/* Logo / Brand Name */}
+          <div className="text-xl font-bold bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent">
+            رابط الثقة
           </div>
 
           {/* Filter Button */}
@@ -139,8 +126,17 @@ const Index = () => {
         </div>
       </header>
 
+      {/* Hero Section */}
+      <HeroSection />
+
       {/* Checkers Grid */}
-      <main className="px-4 py-4">
+      <main className="px-4 py-8" id="checkers-list">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-2xl font-bold text-foreground" dir="rtl">اختر المتحقق المناسب</h2>
+          <Button variant="ghost" className="text-primary hover:text-primary/80">
+            عرض الكل
+          </Button>
+        </div>
         {checkers.length === 0 ? (
           <div className="text-center py-10 text-muted-foreground">
             لا يوجد متحققون متاحون حالياً
