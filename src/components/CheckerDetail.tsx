@@ -1,4 +1,4 @@
-import { ChevronLeft, ChevronRight, Star, Trophy, User } from "lucide-react";
+import { ChevronLeft, ChevronRight, Star, Trophy, User, X } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { DbChecker } from "@/types/checker";
@@ -37,7 +37,7 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
   if (!checker) return null;
 
   // Get social media platforms that have values
-  const socialPlatforms = checker.social_media 
+  const socialPlatforms = checker.social_media
     ? Object.entries(checker.social_media).filter(([_, value]) => value)
     : [];
 
@@ -51,7 +51,7 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
 
   const handleRequestTest = async () => {
     setLoading(true);
-    
+
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       toast({ title: "يجب تسجيل الدخول أولاً", variant: "destructive" });
@@ -113,7 +113,7 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
               <User className="w-24 h-24 text-muted-foreground" />
             </div>
           )}
-          
+
           {/* Navigation Arrows */}
           {allImages.length > 1 && (
             <>
@@ -131,13 +131,13 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
               </button>
             </>
           )}
-          
-          {/* Back Button */}
+
+          {/* Close Button */}
           <button
             onClick={onClose}
-            className="absolute top-4 left-4 w-10 h-10 bg-card rounded-full flex items-center justify-center shadow-card"
+            className="absolute top-4 right-4 z-50 w-10 h-10 bg-black/50 backdrop-blur-md rounded-full flex items-center justify-center border border-white/20 hover:bg-black/70 transition-colors"
           >
-            <ChevronLeft className="w-6 h-6" />
+            <X className="w-6 h-6 text-white" />
           </button>
 
           {/* Dots Indicator */}
@@ -253,7 +253,7 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
           )}
 
           {/* CTA Button */}
-          <Button 
+          <Button
             onClick={handleRequestTest}
             disabled={loading}
             className="w-full py-6 bg-gradient-primary shadow-button text-lg font-semibold rounded-2xl"
