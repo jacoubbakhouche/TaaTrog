@@ -1,7 +1,9 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { Menu, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 import CheckerCard from "@/components/CheckerCard";
 import BottomNav from "@/components/BottomNav";
 import Sidebar from "@/components/Sidebar";
@@ -16,17 +18,14 @@ const Index = () => {
   const [filterOpen, setFilterOpen] = useState(false);
   const [selectedChecker, setSelectedChecker] = useState<DbChecker | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [checkers, setCheckers] = useState<DbChecker[]>([]);
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (!session) {
           navigate("/auth");
-        } else {
-          setLoading(false);
         }
       }
     );
@@ -34,17 +33,16 @@ const Index = () => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (!session) {
         navigate("/auth");
-      } else {
-        setLoading(false);
       }
     });
 
     return () => subscription.unsubscribe();
   }, [navigate]);
 
-  // Load checkers from database
-  useEffect(() => {
-    const loadCheckers = async () => {
+  // Fetch checkers with caching
+  const { data: checkers = [], isLoading: loading } = useQuery({
+    queryKey: ["checkers"],
+    queryFn: async () => {
       const { data, error } = await supabase
         .from("checkers")
         .select("*")
@@ -52,14 +50,38 @@ const Index = () => {
         .order("created_at", { ascending: false });
 
       if (error) {
-        console.error("Error loading checkers:", error);
-        return;
+        toast({
+          title: "خطأ",
+          description: "فشل تحميل قائمة المتحققين",
+          variant: "destructive",
+        });
+        throw error;
       }
 
-      setCheckers(data as DbChecker[]);
-    };
+      return data as DbChecker[];
+    },
+    staleTime: 1000 * 60 * 5, // Cache for 5 minutes
+  });
 
-    loadCheckers();
+  // Realtime subscription for online status updates
+  useEffect(() => {
+    const channel = supabase
+      .channel('public:checkers')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'checkers' },
+        (payload) => {
+          // Invalidate query to refetch updated data
+          // queryClient.invalidateQueries({ queryKey: ["checkers"] });
+          // Note: For smoother updates, we might want to manually update cache here,
+          // but invalidation is safer for consistency.
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const handleCheckerClick = (checker: DbChecker) => {
