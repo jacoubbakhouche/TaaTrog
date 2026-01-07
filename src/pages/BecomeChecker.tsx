@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Camera, Facebook, Instagram, MessageCircle, Phone, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
@@ -46,7 +47,7 @@ const BecomeChecker = () => {
 
   const checkAuthAndExistingRequest = async () => {
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) {
       navigate("/auth");
       return;
@@ -244,7 +245,7 @@ const BecomeChecker = () => {
         {/* Basic Info */}
         <section className="space-y-4">
           <h2 className="text-lg font-bold text-foreground" dir="rtl">المعلومات الأساسية</h2>
-          
+
           <div className="space-y-2">
             <Label htmlFor="display_name" className="text-right block">الاسم المعروض</Label>
             <Input
@@ -329,21 +330,32 @@ const BecomeChecker = () => {
 
         {/* Social Media */}
         <section className="space-y-4">
-          <h2 className="text-lg font-bold text-foreground" dir="rtl">روابط التواصل الاجتماعي</h2>
-          
+          <h2 className="text-lg font-bold text-foreground" dir="rtl">منصات التحقق المتاحة</h2>
+          <p className="text-sm text-muted-foreground mb-4" dir="rtl">اختر المنصات التي يمكنك تنفيذ عمليات التحقق من خلالها</p>
+
           {SOCIAL_PLATFORMS.map((platform) => {
             const Icon = platform.icon;
+            const isChecked = !!formData.social_media[platform.key as keyof typeof formData.social_media];
+
             return (
-              <div key={platform.key} className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center">
-                  <Icon className="w-5 h-5 text-foreground" />
-                </div>
-                <Input
-                  value={formData.social_media[platform.key as keyof typeof formData.social_media]}
-                  onChange={(e) => updateSocialMedia(platform.key, e.target.value)}
-                  placeholder={platform.placeholder}
-                  className="flex-1"
+              <div key={platform.key} className="flex items-center gap-3 p-3 border rounded-xl hover:bg-secondary/50 transition-colors">
+                <Checkbox
+                  id={`platform-${platform.key}`}
+                  checked={isChecked}
+                  onCheckedChange={(checked) => {
+                    updateSocialMedia(platform.key, checked ? "available" : "");
+                  }}
+                  className="w-5 h-5 border-2"
                 />
+                <Label
+                  htmlFor={`platform-${platform.key}`}
+                  className="flex-1 flex items-center gap-3 cursor-pointer"
+                >
+                  <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center">
+                    <Icon className="w-4 h-4 text-foreground" />
+                  </div>
+                  <span className="font-medium text-base">{platform.label}</span>
+                </Label>
               </div>
             );
           })}

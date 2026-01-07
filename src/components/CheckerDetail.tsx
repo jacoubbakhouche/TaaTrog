@@ -1,5 +1,13 @@
 import { ChevronLeft, ChevronRight, Star, Trophy, User, X } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+  type CarouselApi
+} from "@/components/ui/carousel";
 import { Button } from "@/components/ui/button";
 import { DbChecker } from "@/types/checker";
 import { useState, useEffect, useMemo } from "react";
@@ -16,7 +24,18 @@ interface CheckerDetailProps {
 
 const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
   const [currentImage, setCurrentImage] = useState(0);
+  const [api, setApi] = useState<CarouselApi>();
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!api) {
+      return;
+    }
+
+    api.on("select", () => {
+      setCurrentImage(api.selectedScrollSnap());
+    });
+  }, [api]);
   const navigate = useNavigate();
   const { toast } = useToast();
 
