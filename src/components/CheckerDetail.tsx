@@ -98,44 +98,56 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
   };
 
   const handleRequestTest = async () => {
+    console.log("handleRequestTest triggered. Current booking state:", booking);
     setLoading(true);
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
+      console.log("No user found, redirecting to auth");
       toast.error("يجب تسجيل الدخول أولاً");
       navigate("/auth");
       setLoading(false);
       return;
     }
 
-    // If approved, proceed to payment
-    if (booking?.status === 'approved') {
+    // If already paid or handling payment, just open modal
+    // Note: We now open it for 'pending_approval' too to support Payment First
+    if (booking?.status === 'payment_pending' || booking?.status === 'approved' || booking?.status === 'pending_approval') {
+      console.log("Existing booking found, opening PaymentModal");
       setPaymentOpen(true);
       setLoading(false);
       return;
     }
 
-    // If pending, do nothing (should be disabled)
-    if (booking?.status === 'pending_approval') return;
+    // If already paid and active
+    if (booking?.status === 'paid') {
+      toast.info("لديك طلب دفع مسبقاً لهذا المتحقق");
+      setLoading(false);
+      return;
+    }
 
-    // Create new booking
+    // Create a booking with status 'pending_approval' immediately
+    console.log("Creating booking for checker:", checker.id);
     const { data: newBooking, error } = await supabase
       .from("bookings")
       .insert({
         client_id: user.id,
+        user_id: user.id, // Adding user_id as it might be required by RLS or NOT NULL constraint
         checker_id: checker.id,
-        status: "pending_approval",
+        status: "pending_approval", // Using a status we know exists while still opening payment modal
         price: checker.price || 0
       })
       .select()
       .single();
 
     if (error) {
-      console.error(error);
-      toast.error("فشل إنشاء الطلب", { description: "حدث خطأ غير متوقع" });
+      console.error("Supabase error creating booking:", error);
+      // Detailed toast for debugging if needed, but keeping it clean for user
+      toast.error("فشل إنشاء الطلب", { description: "يرجى المحاولة مرة أخرى أو الاتصال بالدعم" });
     } else {
+      console.log("New booking created, opening PaymentModal");
       setBooking({ id: newBooking.id, status: newBooking.status });
-      toast.success("تم إرسال الطلب", { description: "بانتظار موافقة المتحقق" });
+      setPaymentOpen(true);
     }
     setLoading(false);
   };
@@ -265,21 +277,23 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
           </div>
 
           <div className="space-y-6">
-            {/* Social Channels Section */}
+            {/* Social Channels Section - Available Platforms Selection */}
             {socialPlatforms.length > 0 && (
               <div>
-                <h3 className="text-xs font-black text-muted-foreground/60 uppercase tracking-[0.2em] mb-3">قنوات الاختبار المتاحة</h3>
-                <div className="flex flex-wrap gap-3">
+                <h3 className="text-xs font-black text-muted-foreground/60 uppercase tracking-[0.2em] mb-4">قنوات الاختبار المعتمدة</h3>
+                <div className="grid grid-cols-2 gap-3">
                   {socialPlatforms.map(([platform]) => (
-                    <div key={platform} className="flex items-center gap-2 bg-card border border-border px-4 py-2.5 rounded-2xl shadow-sm hover:border-primary/30 transition-colors">
-                      <span className="text-lg">
+                    <div key={platform} className="flex items-center gap-3 bg-secondary/30 border border-border/40 p-3 rounded-[1.2rem] shadow-sm hover:border-primary/20 transition-all group/platform">
+                      <div className="w-10 h-10 rounded-xl bg-background flex items-center justify-center text-xl shadow-inner group-hover/platform:scale-110 transition-transform">
                         {platform === "instagram" && "📷"}
                         {platform === "facebook" && "📘"}
                         {platform === "snapchat" && "👻"}
                         {platform === "whatsapp" && "💬"}
                         {platform === "tiktok" && "🎵"}
-                      </span>
-                      <span className="text-xs font-bold capitalize">{platform}</span>
+                        {platform === "telegram" && "✈️"}
+                        {platform === "twitter" && "🐦"}
+                      </div>
+                      <span className="text-sm font-black capitalize tracking-tight whitespace-nowrap">{platform}</span>
                     </div>
                   ))}
                 </div>
@@ -337,10 +351,10 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
             <div className="pt-2 pb-6">
               <Button
                 onClick={handleRequestTest}
-                disabled={loading || booking?.status === 'pending_approval' || booking?.status === 'rejected'}
+                disabled={loading || booking?.status === 'rejected' || booking?.status === 'paid'}
                 className={cn(
                   "w-full py-8 text-xl font-black rounded-3xl shadow-[0_20px_40px_-12px_rgba(var(--primary),0.25)] transition-all transform active:scale-[0.98] group",
-                  booking?.status === 'approved'
+                  booking?.status === 'paid'
                     ? "bg-green-600 hover:bg-green-700 text-white"
                     : booking?.status === 'rejected'
                       ? "bg-destructive/80 text-white cursor-not-allowed"
@@ -350,15 +364,15 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
                 {loading ? (
                   <div className="flex items-center gap-3">
                     <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>جاري الطلب...</span>
+                    <span>جاري التحميل...</span>
                   </div>
                 ) :
-                  booking?.status === 'pending_approval' ? "الطلب قيد المراجعة" :
-                    booking?.status === 'approved' ? "إتمام عملية الدفع والبدء" :
-                      booking?.status === 'rejected' ? "للأسف، تم رفض طلبك" :
+                  booking?.status === 'payment_pending' || booking?.status === 'approved' || booking?.status === 'pending_approval' ? "إكمال عملية الدفع الآن" :
+                    booking?.status === 'paid' ? "تم الدفع - الطلب نشط" :
+                      booking?.status === 'rejected' ? "تم رفض الطلب" :
                         (
                           <div className="flex items-center justify-center gap-3">
-                            <span>طلب اختبار وفاء</span>
+                            <span>بدء اختبار وفاء (دفع مباشر)</span>
                             <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center group-hover:translate-x-[-4px] transition-transform">
                               <Star className="w-4 h-4 fill-white" />
                             </div>

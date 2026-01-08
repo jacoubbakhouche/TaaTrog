@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Camera, Plus, X, Save, Instagram, Facebook, MessageCircle, Image, Trash2 } from "lucide-react";
+import { ArrowLeft, Camera, Plus, X, Save, Instagram, Facebook, MessageCircle, Image, Trash2, Ghost, Music2, Send, Twitter } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -8,18 +8,21 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 const AVAILABLE_LANGUAGES = [
-  "English", "Spanish", "French", "German", "Italian", "Portuguese", 
+  "English", "Spanish", "French", "German", "Italian", "Portuguese",
   "Arabic", "Chinese", "Japanese", "Korean", "Russian", "Hindi"
 ];
 
 const SOCIAL_PLATFORMS = [
-  { key: "instagram", label: "Instagram", icon: Instagram, placeholder: "@username" },
-  { key: "facebook", label: "Facebook", icon: Facebook, placeholder: "Profile URL" },
-  { key: "whatsapp", label: "WhatsApp", icon: MessageCircle, placeholder: "+1234567890" },
-  { key: "snapchat", label: "Snapchat", icon: MessageCircle, placeholder: "@username" },
-  { key: "tiktok", label: "TikTok", icon: MessageCircle, placeholder: "@username" },
+  { key: "instagram", label: "Instagram", icon: Instagram },
+  { key: "snapchat", label: "Snapchat", icon: Ghost },
+  { key: "tiktok", label: "TikTok", icon: Music2 },
+  { key: "whatsapp", label: "WhatsApp", icon: MessageCircle },
+  { key: "telegram", label: "Telegram", icon: Send },
+  { key: "facebook", label: "Facebook", icon: Facebook },
+  { key: "twitter", label: "X (Twitter)", icon: Twitter },
 ];
 
 const CheckerProfile = () => {
@@ -28,8 +31,8 @@ const CheckerProfile = () => {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [checkerId, setCheckerId] = useState<string | null>(null);
-  
-const [formData, setFormData] = useState({
+
+  const [formData, setFormData] = useState({
     display_name: "",
     age: "",
     gender: "male",
@@ -137,12 +140,6 @@ const [formData, setFormData] = useState({
     }));
   };
 
-  const updateSocialMedia = (platform: string, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      social_media: { ...prev.social_media, [platform]: value },
-    }));
-  };
 
   const handleGalleryUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -428,27 +425,55 @@ const [formData, setFormData] = useState({
           </div>
         </div>
 
-        {/* Social Media */}
+        {/* Social Media Selection - Premium UI */}
         <div>
-          <Label className="mb-3 block">وسائل التواصل الاجتماعي</Label>
-          <div className="space-y-3">
+          <Label className="mb-3 block">وسائل التواصل الاجتماعي التي تعمل عليها</Label>
+          <div className="grid grid-cols-2 gap-3">
             {SOCIAL_PLATFORMS.map(platform => {
               const Icon = platform.icon;
+              const isActive = !!formData.social_media[platform.key];
+
               return (
-                <div key={platform.key} className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center shrink-0">
-                    <Icon className="w-5 h-5" />
+                <div
+                  key={platform.key}
+                  onClick={() => {
+                    setFormData(prev => ({
+                      ...prev,
+                      social_media: {
+                        ...prev.social_media,
+                        [platform.key]: isActive ? "" : "active"
+                      },
+                    }));
+                  }}
+                  className={cn(
+                    "flex items-center gap-3 p-3 rounded-2xl border-2 transition-all cursor-pointer select-none",
+                    isActive
+                      ? "bg-primary/10 border-primary shadow-sm"
+                      : "bg-card border-border hover:border-primary/30"
+                  )}
+                >
+                  <div className={cn(
+                    "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors",
+                    isActive ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"
+                  )}>
+                    <Icon className="w-4 h-4" />
                   </div>
-                  <Input
-                    value={formData.social_media[platform.key] || ""}
-                    onChange={e => updateSocialMedia(platform.key, e.target.value)}
-                    placeholder={platform.placeholder}
-                    className="flex-1"
-                  />
+                  <span className={cn(
+                    "text-sm font-bold tracking-tight",
+                    isActive ? "text-foreground" : "text-muted-foreground"
+                  )}>
+                    {platform.label}
+                  </span>
+                  {isActive && (
+                    <div className="ml-auto w-2 h-2 rounded-full bg-primary animate-pulse" />
+                  )}
                 </div>
               );
             })}
           </div>
+          <p className="text-[10px] text-muted-foreground mt-3 font-medium">
+            * اضغط على المنصات التي تستخدمها في إجراء اختبارات الولاء
+          </p>
         </div>
       </div>
     </div>
