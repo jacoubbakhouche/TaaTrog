@@ -59,15 +59,40 @@ const Admin = () => {
   const [supportMessages, setSupportMessages] = useState<any[]>([]);
   const [pendingPayments, setPendingPayments] = useState<any[]>([]);
 
-  const handleActivateChat = async (paymentId: string) => {
-    setProcessing(paymentId);
+  const handleActivateChat = async (requestId: string) => {
+    setProcessing(requestId);
     try {
-      const { error } = await supabase
+      // 1. Get the request details to find the conversation_id
+      const { data: request, error: fetchError } = await supabase
+        .from('activation_requests')
+        .select('conversation_id, user_id, checker_id')
+        .eq('id', requestId)
+        .single();
+
+      if (fetchError || !request) throw new Error("Request not found");
+
+      // 2. Update Conversation Status -> 'paid'
+      const { error: updateConvError } = await supabase
         .from('conversations')
         .update({ status: 'paid' } as any)
-        .eq('id', paymentId);
+        .eq('id', request.conversation_id);
 
-      if (error) throw error;
+      if (updateConvError) throw updateConvError;
+
+      // 3. Update Request Status -> 'approved'
+      const { error: updateReqError } = await supabase
+        .from('activation_requests')
+        .update({ status: 'approved' } as any)
+        .eq('id', requestId);
+
+      if (updateReqError) throw updateReqError;
+
+      // 4. Notify User (Optional but good)
+      await supabase.from("messages").insert({
+        conversation_id: request.conversation_id,
+        sender_id: user?.id, // Admin ID
+        content: `✅ تم تفعيل المحادثة بنجاح من قبل الإدارة! يمكنك الآن التواصل.`
+      });
 
       toast.success("تم تفعيل المحادثة بنجاح ✅");
       loadData();
@@ -97,9 +122,7 @@ const Admin = () => {
 
   const loadData = async () => {
     try {
-      // Get Admin User ID first
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      console.log("Admin User ID:", user.id);
 
       // Find Admin Checker Profile
       const { data: adminChecker } = await supabase
@@ -108,44 +131,55 @@ const Admin = () => {
         .eq('user_id', user.id)
         .maybeSingle();
 
+      console.log("Admin Checker Profile:", adminChecker);
+
       // Load all data in parallel
-      const [requestsRes, checkersRes, testsRes, paymentsRes, supportRes] = await Promise.all([
+      const [requestsRes, checkersRes, testsRes, pendingRes, supportRes] = await Promise.all([
         supabase.from("checker_requests").select("*").order("created_at", { ascending: false }),
         supabase.from("checkers").select("*").order("created_at", { ascending: false }),
         supabase.from("loyalty_tests").select("id", { count: "exact" }),
+        // Fetch pending payments from NEW activation_requests table
         supabase
-          .from("conversations")
+          .from("activation_requests")
           .select(`
-            id, user_id, checker_id, status, created_at, price, receipt_url,
-            checkers (display_name),
-            profiles!conversations_user_id_fkey (full_name)
+            id,
+            created_at,
+            status,
+            user_id,
+            conversation_id,
+            profiles:user_id (full_name, avatar_url),
+            checkers:checker_id (display_name)
           `)
-          .eq("status", "payment_pending")
+          .eq("status", "pending")
           .order("created_at", { ascending: false }),
-        // Fetch support messages (where admin is the checker and status is 'payment_negotiation')
-        adminChecker ? supabase
+
+        // Fetch support messages (ALL payment negotiations)
+        supabase
           .from("conversations")
           .select(`
             id, user_id, status, created_at,
             profiles!conversations_user_id_fkey (full_name, avatar_url)
           `)
-          .eq("checker_id", adminChecker.id)
           .eq("status", "payment_negotiation")
           .order("created_at", { ascending: false })
-          : Promise.resolve({ data: [], error: null })
       ]);
+
+      console.log("Pending Requests Response:", pendingRes);
+      console.log("Support Messages Response:", supportRes);
 
       if (requestsRes.error) throw requestsRes.error;
       if (checkersRes.error) throw checkersRes.error;
+      if (pendingRes.error) console.error("Error fetching pending requests:", pendingRes.error);
+      if (supportRes.error) console.error("Error fetching support messages:", supportRes.error);
 
       const requestsData = (requestsRes.data as CheckerRequest[]) || [];
       const checkersData = (checkersRes.data as Checker[]) || [];
-      const paymentsData = (paymentsRes.data as any[]) || [];
+      const pendingData = (pendingRes.data as any[]) || [];
       const supportData = (supportRes.data as any[]) || [];
 
       setRequests(requestsData);
       setCheckers(checkersData);
-      setPendingPayments(paymentsData);
+      setPendingPayments(pendingData);
       setSupportMessages(supportData);
       setStats({
         totalCheckers: checkersData.length,

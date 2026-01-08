@@ -212,68 +212,9 @@ const Chat = () => {
     setupChat();
   }, [conversationId, navigate, toast]);
 
-  // Admin: Check for pending activation requests from this user
-  const [pendingActivationRequest, setPendingActivationRequest] = useState<any>(null);
 
-  useEffect(() => {
-    const fetchPendingActivations = async () => {
-      // 1. Only run if I am the admin (checker) in a payment negotiation
-      if (!conversationId || !isImChecker || conversationStatus !== 'payment_negotiation') return;
 
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
 
-      // 2. Get the current conversation to find the Client's User ID
-      // We need to know who the "other person" (Client) is.
-      const { data: currentConv } = await supabase
-        .from('conversations')
-        .select('user_id')
-        .eq('id', conversationId)
-        .single();
-
-      if (!currentConv) return;
-
-      const clientUserId = currentConv.user_id;
-
-      // 3. Use the RPC to safely fetch pending requests for this client
-      const { data: pendingReq, error } = await supabase
-        .rpc('get_pending_activations_for_user', { target_user_id: clientUserId })
-        .maybeSingle();
-
-      if (pendingReq) {
-        setPendingActivationRequest(pendingReq);
-      }
-    };
-
-    fetchPendingActivations();
-  }, [conversationId, isImChecker, conversationStatus]); // Re-run if status changes
-
-  const handleAdminActivateRequest = async () => {
-    if (!pendingActivationRequest) return;
-
-    try {
-      const { error } = await supabase
-        .from('conversations')
-        .update({ status: 'paid' } as any)
-        .eq('id', pendingActivationRequest.id);
-
-      if (error) throw error;
-
-      toast({ title: "تم التفعيل", description: "تم تفعيل المحادثة المطلوبة بنجاح" });
-      setPendingActivationRequest(null);
-
-      // Send confirmation message
-      await supabase.from("messages").insert({
-        conversation_id: conversationId,
-        sender_id: currentUserId,
-        content: `✅ تم تفعيل المحادثة مع ${pendingActivationRequest.checker_name} بنجاح! يمكنك العودة لقائمة الرسائل وبدء الحديث معه الآن.`
-      });
-
-    } catch (e) {
-      console.error(e);
-      toast({ title: "خطأ", description: "فشل التفعيل", variant: "destructive" });
-    }
-  };
 
 
 
@@ -330,39 +271,7 @@ const Chat = () => {
         </div>
       </div>
 
-      {/* Admin Activation Request Card */}
-      {pendingActivationRequest && (
-        <div className="mx-4 mt-4 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl relative">
-          <div className="flex items-start gap-3">
-            <div className="p-2 bg-yellow-500/20 rounded-lg shrink-0">
-              <User className="w-5 h-5 text-yellow-600" />
-            </div>
-            <div className="flex-1">
-              <h3 className="font-bold text-sm text-yellow-700 mb-1">طلب تفعيل محادثة جديد</h3>
-              <p className="text-xs text-yellow-700/80 mb-3">
-                يريد هذا العميل تفعيل محادثة مع <strong>{pendingActivationRequest.checker_name}</strong>.
-              </p>
-              <div className="flex gap-2">
-                <Button
-                  size="sm"
-                  onClick={handleAdminActivateRequest}
-                  className="bg-green-600 hover:bg-green-700 text-white h-8 text-xs w-full"
-                >
-                  Mوافقة وتفعيل ✅
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setPendingActivationRequest(null)} // Dismiss locally for now
-                  className="border-red-200 text-red-600 hover:bg-red-50 h-8 text-xs"
-                >
-                  تجاهل
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
@@ -474,78 +383,57 @@ const Chat = () => {
                           const { data: { user } } = await supabase.auth.getUser();
                           if (!user) return;
 
-                          toast({ title: "جاري الاتصال...", description: "يتم تحويلك لمحادثة المشرف" });
+                          toast({ title: "جاري الإرسال...", description: "يتم إرسال طلب التفعيل للمشرف" });
 
-                          // 1. Find Admin ID
-                          const { data: adminUserId, error: rpcError } = await supabase.rpc('get_support_admin_id' as any);
-                          if (rpcError || !adminUserId) {
-                            toast({ title: "خطأ", description: "تعذر الاتصال بالمشرف", variant: "destructive" });
+                          // 1. Find Admin/Support ID (To link the request if needed, or just insert)
+                          // We need the checker_id of the current conversation to know who we are paying for?
+                          // The `activation_requests` table has `checker_id`. Ideally this is the TARGET checker we want to unlock chat with.
+                          // So we use the conversation's checker_id.
+
+                          // We need to know who the checker is in this conversation.
+                          // We entered Chat page, we fetched `conv`.
+
+                          // Re-fetch conversation to be safe or use state if available.
+                          // We have `conversationId`.
+
+                          const { data: currentConv } = await supabase
+                            .from('conversations')
+                            .select('checker_id, status')
+                            .eq('id', conversationId)
+                            .single();
+
+                          if (!currentConv || !currentConv.checker_id) {
+                            toast({ title: "خطأ", description: "بيانات المحادثة غير مكتملة", variant: "destructive" });
                             return;
                           }
 
-                          // 2. Find Admin Checker Profile
-                          const { data: adminChecker } = await supabase
-                            .from('checkers')
-                            .select('id')
-                            .eq('user_id', adminUserId as string)
-                            .maybeSingle();
+                          // 2. Insert into activation_requests
+                          const { error: insertError } = await supabase
+                            .from('activation_requests')
+                            .insert({
+                              user_id: user.id,
+                              conversation_id: conversationId,
+                              checker_id: currentConv.checker_id,
+                              status: 'pending'
+                            } as any);
 
-                          if (!adminChecker) {
-                            toast({ title: "خطأ", description: "حساب المشرف غير نشط", variant: "destructive" });
-                            return;
-                          }
+                          if (insertError) throw insertError;
 
-                          // 3. Mark Original Booking as 'payment_pending'
+                          // 3. Mark Original Booking as 'payment_pending' (Visual Feedback)
                           await supabase
                             .from('conversations')
                             .update({ status: 'payment_pending' } as any)
                             .eq('id', conversationId);
 
-                          // 4. Create/Get Negotiation Message
-                          const { data: existingConv } = await supabase
-                            .from('conversations')
-                            .select('id')
-                            .eq('user_id', user.id)
-                            .eq('checker_id', adminChecker.id)
-                            .maybeSingle();
+                          setConversationStatus('payment_pending');
+                          toast({ title: "تم الإرسال ✅", description: "طلبك قيد المراجعة من قبل المشرف." });
 
-                          let targetConvId = existingConv?.id;
-
-                          if (targetConvId) {
-                            // Update existing conversation to ensure it's UNLOCKED
-                            await supabase
-                              .from('conversations')
-                              .update({ status: 'payment_negotiation' } as any)
-                              .eq('id', targetConvId);
-                          } else {
-                            const { data: newConv, error: createError } = await supabase
-                              .from('conversations')
-                              .insert({
-                                user_id: user.id,
-                                checker_id: adminChecker.id,
-                                status: 'payment_negotiation',
-                                price: 0
-                              } as any)
-                              .select()
-                              .single();
-
-                            if (createError) throw createError;
-                            targetConvId = newConv.id;
-
-                            // Initial Message
-                            await supabase.from('messages').insert({
-                              conversation_id: targetConvId,
-                              sender_id: user.id,
-                              content: "مرحباً، أود إتمام الدفع يدوياً لهذا الطلب. أرجو تزويدي بمعلومات الحساب."
-                            });
-                          }
-
-                          // 5. Refresh/Redirect
-                          window.location.href = `/chat/${targetConvId}`;
+                          // Optional: Notify Admin via Message? 
+                          // No, the Admin Dashboard will read from the new table.
 
                         } catch (e) {
                           console.error(e);
-                          toast({ title: "خطأ", description: "حدث خطأ أثناء التحويل", variant: "destructive" });
+                          toast({ title: "خطأ", description: "حدث خطأ أثناء الإرسال", variant: "destructive" });
                         }
                       }}
                       variant="outline"
