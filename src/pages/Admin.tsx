@@ -606,12 +606,16 @@ const Admin = () => {
                     <Card key={payment.id}>
                       <CardContent className="pt-6 flex items-center justify-between">
                         <div>
-                          <h3 className="font-bold text-lg">طلب تفعيل محادثة</h3>
-                          <div className="text-sm text-muted-foreground space-y-1 mt-1">
-                            <p>العميل: <span className="text-foreground">{payment.profiles?.full_name || "غير معروف"}</span></p>
-                            <p>المتحقق المستهدف: <span className="text-foreground">{payment.checkers?.display_name || "غير معروف"}</span></p>
-                            <p>المبلغ: <span className="font-mono">{payment.price || 0} USD</span></p>
-                            <p className="text-xs">التاريخ: {new Date(payment.created_at).toLocaleDateString("ar")}</p>
+                          <h3 className="font-bold text-lg text-primary mb-2">طلب تفعيل محادثة 🔓</h3>
+                          <div className="text-base font-medium space-y-1 mt-1 bg-secondary/30 p-3 rounded-lg border border-border">
+                            <p className="flex items-center gap-2">
+                              <span className="text-muted-foreground">تفعيل الدردشة بين:</span>
+                              <span className="font-bold text-foreground">{payment.profiles?.full_name || "العميل"}</span>
+                              <span className="text-muted-foreground">و</span>
+                              <span className="font-bold text-foreground">{payment.checkers?.display_name || "المتحقق"}</span>
+                            </p>
+                            <p className="text-sm mt-2 text-muted-foreground">المبلغ: <span className="font-mono font-bold text-foreground">{payment.price || 0} USD</span></p>
+                            <p className="text-xs text-muted-foreground">التاريخ: {new Date(payment.created_at).toLocaleDateString("ar")}</p>
                           </div>
                           {payment.receipt_url && (
                             <a href={payment.receipt_url} target="_blank" rel="noopener noreferrer" className="text-blue-500 text-sm hover:underline mt-2 inline-block">
