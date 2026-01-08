@@ -55,6 +55,8 @@ const playTone = (freq: number = 440, type: QuoteOscillatorTypeQuote = "sine", d
 const playSendSound = () => playTone(600, "sine", 0.15); // High beep
 const playReceiveSound = () => playTone(400, "sine", 0.2); // Low beep
 
+const ADMIN_EMAIL = "yakoubbakhouche011@gmail.com";
+
 const Chat = () => {
   const { conversationId } = useParams();
   const navigate = useNavigate();
@@ -64,6 +66,7 @@ const Chat = () => {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [partnerName, setPartnerName] = useState("");
   const [partnerAvatar, setPartnerAvatar] = useState<string | null>(null);
 
@@ -91,6 +94,7 @@ const Chat = () => {
         return;
       }
       setCurrentUserId(user.id);
+      setCurrentUserEmail(user.email || null);
 
       // 1. Fetch Conversation Basic Info First (Robustness)
       const { data: conv, error: convError } = await supabase
@@ -118,13 +122,21 @@ const Chat = () => {
       setIsImChecker(!!imChecker);
 
       // 2.5 If Admin/Support, Check for Activation Requests
-      if (imChecker && conv.status === 'payment_negotiation') {
-        const { data: req } = await supabase
+      // 2.5 If Admin/Support, Check for Activation Requests
+      if (imChecker) {
+        // Fetch any pending request for this user, regardless of exact conversation status matching strictly, 
+        // to be safe. But ideally we only check if this is the support chat.
+        // We know this IS the support chat context because imChecker is true (Admin) talking to User.
+        const { data: req, error: reqError } = await supabase
           .from('activation_requests')
-          .select('*, conversations(id)') // Join to confirm exists
+          .select('*')
           .eq('user_id', conv.user_id)
           .eq('status', 'pending')
+          .order('created_at', { ascending: false })
+          .limit(1)
           .maybeSingle();
+
+        console.log("Admin Banner Debug:", { imChecker, status: conv.status, userId: conv.user_id, req, reqError });
 
         if (req) {
           setActivationRequest(req);
@@ -394,7 +406,7 @@ const Chat = () => {
 
 
       {/* Admin Activation Banner */}
-      {isImChecker && activationRequest && (
+      {isImChecker && conversationStatus === 'payment_negotiation' && (
         <div className="bg-yellow-50 md:bg-yellow-500/10 border-b border-yellow-200 p-4 flex flex-col sm:flex-row items-center justify-between gap-4 sticky top-[65px] z-10 backdrop-blur-md animate-in slide-in-from-top-2">
           <div className="flex items-center gap-3">
             <div className="bg-yellow-100 p-2 rounded-full">
@@ -402,7 +414,7 @@ const Chat = () => {
             </div>
             <div>
               <p className="font-bold text-sm text-yellow-900 dark:text-yellow-100">طلب تفعيل خدمة معلق</p>
-              <p className="text-xs text-yellow-700 dark:text-yellow-300">هذا المستخدم يريد تفعيل المحادثة رقم #{activationRequest.conversation_id.substring(0, 6)}</p>
+              <p className="text-xs text-yellow-700 dark:text-yellow-300">هذا المستخدم يريد تفعيل المحادثة رقم #{conversationId?.substring(0, 6)}</p>
             </div>
           </div>
           <Button
@@ -410,29 +422,33 @@ const Chat = () => {
               try {
                 toast({ title: "جاري التفعيل...", description: "لحظات من فضلك" });
 
-                // 1. Update Request
-                const { error: reqError } = await supabase
-                  .from('activation_requests')
-                  .update({ status: 'approved' } as any)
-                  .eq('id', activationRequest.id);
-                if (reqError) throw reqError;
-
-                // 2. Update Conversation
+                // 1. Update Conversation Directly
                 const { error: convError } = await supabase
                   .from('conversations')
                   .update({ status: 'paid' } as any)
-                  .eq('id', activationRequest.conversation_id);
+                  .eq('id', conversationId);
+
                 if (convError) throw convError;
+
+                // 2. Best Effort: Update any related Request
+                await supabase
+                  .from('activation_requests')
+                  .update({ status: 'approved' } as any)
+                  .eq('conversation_id', conversationId);
 
                 // 3. Notify User in Chat
                 await supabase.from("messages").insert({
-                  conversation_id: conversationId, // Current support chat
+                  conversation_id: conversationId,
                   sender_id: currentUserId,
-                  content: `✅ تم تفعيل المحادثة (#${activationRequest.conversation_id.substring(0, 6)}) بنجاح! يمكنك الآن العودة لتلك المحادثة.`
+                  content: `✅ تم تفعيل المحادثة (#${conversationId?.substring(0, 6)}) بنجاح! يمكنك الآن العودة لتلك المحادثة.`
                 });
 
+                setConversationStatus('paid'); // Update local state to hide banner instantly
                 toast({ title: "تم التفعيل بنجاح! 🎉", description: "تم تحديث حالة العميل." });
-                setActivationRequest(null); // Hide banner
+
+                // Optional: Reload after short delay to sync everything
+                setTimeout(() => window.location.reload(), 1500);
+
               } catch (e) {
                 console.error(e);
                 toast({ title: "خطأ", description: "حدث خطأ أثناء التفعيل", variant: "destructive" });
@@ -509,33 +525,40 @@ const Chat = () => {
           <div className="p-4 rounded-xl bg-secondary/50 border border-border text-center">
             {isImChecker ? (
               // Checker/Admin View of Locked Chat
-              <div className="space-y-4">
-                <p className="font-bold text-muted-foreground">هذه المحادثة بانتظار الدفع أو التفعيل 🔒</p>
-                <p className="text-xs text-muted-foreground mb-3">بصفتك المتحقق، يمكنك تفعيل المحادثة فوراً.</p>
-                <Button
-                  onClick={async () => {
-                    try {
-                      toast({ title: "جاري التفعيل...", description: "يتم تفعيل المحادثة الآن" });
-                      const { error } = await supabase
-                        .from('conversations')
-                        .update({ status: 'paid' } as any)
-                        .eq('id', conversationId);
+              currentUserEmail === ADMIN_EMAIL ? (
+                <div className="space-y-4">
+                  <p className="font-bold text-muted-foreground">هذه المحادثة بانتظار الدفع أو التفعيل 🔒</p>
+                  <p className="text-xs text-muted-foreground mb-3">بصفتك المشرف (Admin)، يمكنك تفعيل المحادثة فوراً.</p>
+                  <Button
+                    onClick={async () => {
+                      try {
+                        toast({ title: "جاري التفعيل...", description: "يتم تفعيل المحادثة الآن" });
+                        const { error } = await supabase
+                          .from('conversations')
+                          .update({ status: 'paid' } as any)
+                          .eq('id', conversationId);
 
-                      if (error) throw error;
+                        if (error) throw error;
 
-                      setConversationStatus('paid');
-                      toast({ title: "تم التفعيل بنجاح ✅", description: "يمكنك الآن بدء الدردشة" });
-                      window.location.reload();
-                    } catch (e) {
-                      console.error(e);
-                      toast({ title: "خطأ", description: "فشل التفعيل", variant: "destructive" });
-                    }
-                  }}
-                  className="w-full bg-green-600 hover:bg-green-700 text-white"
-                >
-                  ✅ تفعيل المحادثة فوراً
-                </Button>
-              </div>
+                        setConversationStatus('paid');
+                        toast({ title: "تم التفعيل بنجاح ✅", description: "يمكنك الآن بدء الدردشة" });
+                        window.location.reload();
+                      } catch (e) {
+                        console.error(e);
+                        toast({ title: "خطأ", description: "فشل التفعيل", variant: "destructive" });
+                      }
+                    }}
+                    className="w-full bg-green-600 hover:bg-green-700 text-white"
+                  >
+                    ✅ تفعيل المحادثة فوراً
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <p className="font-bold text-muted-foreground">هذه المحادثة بانتظار الدفع أو التفعيل 🔒</p>
+                  <p className="text-sm text-muted-foreground">يجب على العميل إتمام الدفع وتفعيل المحادثة من قبل الإدارة.</p>
+                </div>
+              )
             ) : (
               // Client View of Locked Chat
               conversationStatus === "pending_approval" ? (
