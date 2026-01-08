@@ -1,5 +1,6 @@
 import { Star, Trophy, User, X } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
   Carousel,
   CarouselContent,
@@ -27,6 +28,7 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
   const [currentImage, setCurrentImage] = useState(0);
   const [api, setApi] = useState<CarouselApi>();
   const [loading, setLoading] = useState(false);
+  const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!api) {
@@ -55,16 +57,8 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
     setCurrentImage(0);
   }, [checker?.id]);
 
-  if (!checker) return null;
-
-  // Get social media platforms that have values
-  const socialPlatforms = checker.social_media
-    ? Object.entries(checker.social_media).filter(([_, value]) => value)
-    : [];
-
-
-
   const [booking, setBooking] = useState<{ id: string; status: string } | null>(null);
+  const [paymentOpen, setPaymentOpen] = useState(false);
 
   // Check for existing booking
   useEffect(() => {
@@ -84,16 +78,21 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
       }
     };
 
-    if (isOpen) {
+    if (isOpen && checker) {
       checkBooking();
     }
   }, [isOpen, checker]);
 
-  const [paymentOpen, setPaymentOpen] = useState(false);
+  if (!checker) return null;
+
+  // Get social media platforms that have values
+  const socialPlatforms = checker.social_media
+    ? Object.entries(checker.social_media).filter(([_, value]) => value)
+    : [];
 
   const handlePaymentSuccess = () => {
     // Payment successful, maybe refresh or navigate
-    toast({ title: "تم الدفع بنجاح", description: "جاري فتح المحادثة..." });
+    toast.success("تم الدفع بنجاح", { description: "جاري فتح المحادثة..." });
     // TODO: Navigate to chat
     // For now, assume chat creation logic will be here or handled
   };
@@ -103,7 +102,7 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
 
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
-      toast({ title: "يجب تسجيل الدخول أولاً", variant: "destructive" });
+      toast.error("يجب تسجيل الدخول أولاً");
       navigate("/auth");
       setLoading(false);
       return;
@@ -133,10 +132,10 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
 
     if (error) {
       console.error(error);
-      toast({ title: "حدث خطأ", description: "فشل إنشاء الطلب", variant: "destructive" });
+      toast.error("فشل إنشاء الطلب", { description: "حدث خطأ غير متوقع" });
     } else {
       setBooking({ id: newBooking.id, status: newBooking.status });
-      toast({ title: "تم إرسال الطلب", description: "بانتظار موافقة المتحقق" });
+      toast.success("تم إرسال الطلب", { description: "بانتظار موافقة المتحقق" });
     }
     setLoading(false);
   };
@@ -145,7 +144,7 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
     <Sheet open={isOpen} onOpenChange={onClose}>
       <SheetContent side="bottom" className="h-[85vh] md:h-[90vh] p-0 rounded-t-3xl overflow-hidden">
         {/* Image Carousel */}
-        <div className="relative h-[45%] bg-muted">
+        <div className="relative h-[25%] md:h-[45%] bg-muted">
           {allImages.length > 0 ? (
             <Carousel className="w-full h-full" setApi={setApi}>
               <CarouselContent className="h-full ml-0">
@@ -154,8 +153,9 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
                     <img
                       src={src}
                       alt={`${checker.display_name} - ${index + 1}`}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-cover cursor-zoom-in"
                       loading="eager"
+                      onClick={() => setFullscreenImage(src)}
                     />
                   </CarouselItem>
                 ))}
@@ -198,7 +198,7 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
         </div>
 
         {/* Content */}
-        <div className="p-5 overflow-y-auto h-[55%]">
+        <div className="p-5 overflow-y-auto h-[75%] md:h-[55%]">
           {/* Header */}
           <div className="flex items-start justify-between mb-4">
             <div className="flex items-center gap-3">
@@ -323,6 +323,27 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
           onPaymentSuccess={handlePaymentSuccess}
         />
       )}
+
+      {/* Fullscreen Image Viewer */}
+      <Dialog open={!!fullscreenImage} onOpenChange={() => setFullscreenImage(null)}>
+        <DialogContent className="max-w-[95vw] h-fit p-0 bg-transparent border-none">
+          {fullscreenImage && (
+            <div className="relative flex items-center justify-center p-0">
+              <img
+                src={fullscreenImage}
+                alt="Fullscreen"
+                className="w-full h-auto max-h-[85vh] object-contain rounded-lg shadow-2xl"
+              />
+              <button
+                onClick={() => setFullscreenImage(null)}
+                className="absolute -top-12 right-0 w-10 h-10 bg-black/50 backdrop-blur-md rounded-full flex items-center justify-center border border-white/20 hover:bg-black/70 transition-colors"
+              >
+                <X className="w-6 h-6 text-white" />
+              </button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </Sheet>
   );
 };
