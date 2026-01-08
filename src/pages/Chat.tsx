@@ -212,6 +212,96 @@ const Chat = () => {
     setupChat();
   }, [conversationId, navigate, toast]);
 
+  // Admin: Check for pending activation requests from this user
+  const [pendingActivationRequest, setPendingActivationRequest] = useState<any>(null);
+
+  useEffect(() => {
+    const fetchPendingActivations = async () => {
+      // 1. Only run if I am the admin (checker) in a payment negotiation
+      if (!conversationId || !isImChecker || conversationStatus !== 'payment_negotiation') return;
+
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // 2. Get the current conversation to find the Client's User ID
+      // We need to know who the "other person" (Client) is.
+      const { data: currentConv } = await supabase
+        .from('conversations')
+        .select('user_id')
+        .eq('id', conversationId)
+        .single();
+
+      if (!currentConv) return;
+
+      const clientUserId = currentConv.user_id;
+
+      // 3. Use the RPC to safely fetch pending requests for this client
+      const { data: pendingReq, error } = await supabase
+        .rpc('get_pending_activations_for_user', { target_user_id: clientUserId })
+        .maybeSingle();
+
+      if (pendingReq) {
+        setPendingActivationRequest(pendingReq);
+      }
+    };
+
+    fetchPendingActivations();
+  }, [conversationId, isImChecker, conversationStatus]); // Re-run if status changes
+
+  const handleAdminActivateRequest = async () => {
+    if (!pendingActivationRequest) return;
+
+    try {
+      const { error } = await supabase
+        .from('conversations')
+        .update({ status: 'paid' } as any)
+        .eq('id', pendingActivationRequest.id);
+
+      if (error) throw error;
+
+      toast({ title: "تم التفعيل", description: "تم تفعيل المحادثة المطلوبة بنجاح" });
+      setPendingActivationRequest(null);
+
+      // Send confirmation message
+      await supabase.from("messages").insert({
+        conversation_id: conversationId,
+        sender_id: currentUserId,
+        content: `✅ تم تفعيل المحادثة مع ${pendingActivationRequest.checker_name} بنجاح! يمكنك العودة لقائمة الرسائل وبدء الحديث معه الآن.`
+      });
+
+    } catch (e) {
+      console.error(e);
+      toast({ title: "خطأ", description: "فشل التفعيل", variant: "destructive" });
+    }
+  };
+
+  const handleAdminActivateRequest = async () => {
+    if (!pendingActivationRequest) return;
+
+    try {
+      const { error } = await supabase
+        .from('conversations')
+        .update({ status: 'paid' } as any)
+        .eq('id', pendingActivationRequest.id);
+
+      if (error) throw error;
+
+      toast({ title: "تم التفعيل", description: "تم تفعيل المحادثة المطلوبة بنجاح" });
+      setPendingActivationRequest(null);
+
+      // Send confirmation message
+      await supabase.from("messages").insert({
+        conversation_id: conversationId,
+        sender_id: currentUserId,
+        content: `✅ تم تفعيل المحادثة مع ${pendingActivationRequest.checkers?.display_name} بنجاح! يمكنك العودة لقائمة الرسائل وبدء الحديث معه الآن.`
+      });
+
+    } catch (e) {
+      console.error(e);
+      toast({ title: "خطأ", description: "فشل التفعيل", variant: "destructive" });
+    }
+  };
+
   const sendMessage = async () => {
     if (!newMessage.trim() || !currentUserId || sending) return;
 
@@ -264,6 +354,40 @@ const Chat = () => {
           <p className="text-[10px] text-online font-bold uppercase tracking-wider">متصل الآن</p>
         </div>
       </div>
+
+      {/* Admin Activation Request Card */}
+      {pendingActivationRequest && (
+        <div className="mx-4 mt-4 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-xl relative">
+          <div className="flex items-start gap-3">
+            <div className="p-2 bg-yellow-500/20 rounded-lg shrink-0">
+              <User className="w-5 h-5 text-yellow-600" />
+            </div>
+            <div className="flex-1">
+              <h3 className="font-bold text-sm text-yellow-700 mb-1">طلب تفعيل محادثة جديد</h3>
+              <p className="text-xs text-yellow-700/80 mb-3">
+                يريد هذا العميل تفعيل محادثة مع <strong>{pendingActivationRequest.checkers?.display_name}</strong>.
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  onClick={handleAdminActivateRequest}
+                  className="bg-green-600 hover:bg-green-700 text-white h-8 text-xs w-full"
+                >
+                  Mوافقة وتفعيل ✅
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setPendingActivationRequest(null)} // Dismiss locally for now
+                  className="border-red-200 text-red-600 hover:bg-red-50 h-8 text-xs"
+                >
+                  تجاهل
+                </Button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">

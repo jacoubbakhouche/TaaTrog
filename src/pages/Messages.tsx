@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-import { User, MessageCircle } from "lucide-react";
+import { User, MessageCircle, Trash2 } from "lucide-react";
 import BottomNav from "@/components/BottomNav";
 
 
@@ -145,7 +145,6 @@ const Messages = () => {
         <h1 className="text-xl font-bold text-foreground">الرسائل</h1>
       </div>
 
-      {/* Conversations List */}
       <div className="divide-y divide-border">
         {conversations.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center px-4">
@@ -168,47 +167,78 @@ const Messages = () => {
               : conv.checkers?.avatar_url;
 
             return (
-              <button
+              <div
                 key={conv.id}
-                onClick={() => navigate(`/chat/${conv.id}`)}
-                className="w-full flex items-center gap-3 p-4 hover:bg-secondary/50 transition-colors text-right"
+                className="w-full flex items-center gap-3 p-4 hover:bg-secondary/50 transition-colors relative group"
               >
-                <div className="w-12 h-12 rounded-full overflow-hidden bg-secondary flex-shrink-0">
-                  {partnerAvatar ? (
-                    <img
-                      src={partnerAvatar}
-                      alt=""
-                      className="w-full h-full object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center">
-                      <User className="w-6 h-6 text-muted-foreground" />
+                <div
+                  className="flex-1 flex items-center gap-3 cursor-pointer min-w-0"
+                  onClick={() => navigate(`/chat/${conv.id}`)}
+                >
+                  <div className="w-12 h-12 rounded-full overflow-hidden bg-secondary flex-shrink-0">
+                    {partnerAvatar ? (
+                      <img
+                        src={partnerAvatar}
+                        alt=""
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center">
+                        <User className="w-6 h-6 text-muted-foreground" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0 text-right">
+                    <div className="flex items-center justify-between mb-1">
+                      <h3 className="font-semibold text-foreground truncate">
+                        {partnerName}
+                      </h3>
+                      {conv.last_message && (
+                        <span className="text-xs text-muted-foreground flex-shrink-0 mr-2">
+                          {formatDate(conv.last_message.created_at)}
+                        </span>
+                      )}
                     </div>
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between mb-1">
-                    <h3 className="font-semibold text-foreground truncate">
-                      {partnerName}
-                    </h3>
-                    {conv.last_message && (
-                      <span className="text-xs text-muted-foreground flex-shrink-0">
-                        {formatDate(conv.last_message.created_at)}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <p className="text-sm text-muted-foreground truncate">
-                      {conv.last_message?.content || "ابدأ المحادثة"}
-                    </p>
-                    {(conv.unread_count ?? 0) > 0 && (
-                      <span className="bg-primary text-primary-foreground text-xs w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0">
-                        {conv.unread_count}
-                      </span>
-                    )}
+                    <div className="flex items-center justify-between">
+                      <p className="text-sm text-muted-foreground truncate">
+                        {conv.last_message?.content || "ابدأ المحادثة"}
+                      </p>
+                      {(conv.unread_count ?? 0) > 0 && (
+                        <span className="bg-primary text-primary-foreground text-xs w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0 mr-2">
+                          {conv.unread_count}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </button>
+
+                <button
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    if (!window.confirm("هل أنت متأكد من حذف هذه المحادثة؟")) return;
+
+                    const { error } = await supabase
+                      .from("conversations")
+                      .delete()
+                      .eq("id", conv.id);
+
+                    if (error) {
+                      console.error("Error deleting conversation:", error);
+                      // Make sure toast is imported or use alert if not available in this scope, 
+                      // but typically it is. If not, console error is fine for now as we adding logic.
+                      // Adjusting to use alert for safety if toast not imported in original snippet scope shown.
+                      // Re-checking imports: toast is NOT imported in Messages.tsx view. 
+                      // I will import toast or just use console/alert.
+                    } else {
+                      setConversations(conversations.filter((c) => c.id !== conv.id));
+                    }
+                  }}
+                  className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
+                  title="حذف المحادثة"
+                >
+                  <Trash2 className="w-5 h-5" />
+                </button>
+              </div>
             );
           })
         )}
