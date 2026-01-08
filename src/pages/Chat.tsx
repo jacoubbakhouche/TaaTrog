@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ChevronLeft, Send, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import BottomNav from "@/components/BottomNav";
 
 interface Message {
   id: string;
@@ -30,7 +31,8 @@ const Chat = () => {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const [checker, setChecker] = useState<Checker | null>(null);
+  const [partnerName, setPartnerName] = useState("");
+  const [partnerAvatar, setPartnerAvatar] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -42,7 +44,7 @@ const Chat = () => {
   }, [messages]);
 
   useEffect(() => {
-    const fetchData = async () => {
+    const setupChat = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
         navigate("/auth");
@@ -50,66 +52,108 @@ const Chat = () => {
       }
       setCurrentUserId(user.id);
 
-      // Fetch conversation with checker info
-      const { data: conversation, error: convError } = await supabase
-        .from("conversations")
-        .select("*, checkers(*)")
-        .eq("id", conversationId)
-        .single();
+      const fetchMessages = async () => {
+        // Fetch conversation with checker and client info
+        const { data: conv, error: convError } = await supabase
+          .from("conversations")
+          .select(`
+            *,
+            checkers:checker_id (
+              id,
+              display_name,
+              avatar_url,
+              user_id
+            ),
+            profiles:user_id (
+              full_name,
+              avatar_url
+            )
+          `)
+          .eq("id", conversationId)
+          .maybeSingle() as any;
 
-      if (convError || !conversation) {
-        toast({ title: "خطأ", description: "المحادثة غير موجودة", variant: "destructive" });
-        navigate("/messages");
-        return;
-      }
-
-      setChecker(conversation.checkers as Checker);
-
-      // Fetch messages
-      const { data: msgs, error: msgsError } = await supabase
-        .from("messages")
-        .select("*")
-        .eq("conversation_id", conversationId)
-        .order("created_at", { ascending: true });
-
-      if (msgsError) {
-        console.error("Error fetching messages:", msgsError);
-      } else {
-        setMessages(msgs || []);
-      }
-
-      // Mark messages as read
-      await supabase
-        .from("messages")
-        .update({ is_read: true })
-        .eq("conversation_id", conversationId)
-        .neq("sender_id", user.id);
-
-      setLoading(false);
-    };
-
-    fetchData();
-
-    // Subscribe to new messages
-    const channel = supabase
-      .channel(`messages-${conversationId}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "messages",
-          filter: `conversation_id=eq.${conversationId}`,
-        },
-        (payload) => {
-          setMessages((prev) => [...prev, payload.new as Message]);
+        if (convError || !conv) {
+          console.error("Error fetching conversation:", convError);
+          toast({ title: "خطأ", description: "فشل تحميل المحادثة", variant: "destructive" });
+          navigate("/messages");
+          return;
         }
-      )
-      .subscribe();
 
-    return () => {
-      supabase.removeChannel(channel);
+        const isImChecker = conv.checkers?.user_id === user.id;
+        setPartnerName(isImChecker ? (conv.profiles?.full_name || "عميل") : conv.checkers?.display_name);
+        setPartnerAvatar(isImChecker ? conv.profiles?.avatar_url : conv.checkers?.avatar_url);
+
+        // Fetch messages
+        const { data: msgs, error: msgsError } = await supabase
+          .from("messages")
+          .select("*")
+          .eq("conversation_id", conversationId)
+          .order("created_at", { ascending: true });
+
+        if (msgsError) {
+          console.error("Error fetching messages:", msgsError);
+        } else {
+          setMessages(msgs as Message[]);
+        }
+        setLoading(false);
+
+        // Mark messages as read
+        const { error: readError } = await supabase
+          .from("messages")
+          .update({ is_read: true })
+          .eq("conversation_id", conversationId)
+          .neq("sender_id", user.id)
+          .eq("is_read", false);
+
+        if (readError) console.error("Error marking messages as read:", readError);
+      };
+
+      fetchMessages();
+
+      // Subscribe to new messages
+      console.log("Subscribing to messages for conversation:", conversationId);
+      const channel = supabase
+        .channel(`messages:${conversationId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "messages",
+            filter: `conversation_id=eq.${conversationId}`,
+          },
+          (payload) => {
+            console.log("New message received via realtime:", payload.new);
+            const newMessage = payload.new as Message;
+            setMessages((prev) => {
+              // Avoid duplicates
+              if (prev.some(m => m.id === newMessage.id)) return prev;
+              return [...prev, newMessage];
+            });
+
+            // If message is from partner, mark as read
+            if (newMessage.sender_id !== user.id) {
+              supabase
+                .from("messages")
+                .update({ is_read: true })
+                .eq("id", newMessage.id)
+                .then(({ error }) => {
+                  if (error) console.error("Error marking msg as read:", error);
+                });
+            }
+          }
+        )
+        .subscribe((status) => {
+          console.log(`Realtime status for conversation ${conversationId}:`, status);
+        });
+
+      return () => {
+        console.log("Unsubscribing from messages:", conversationId);
+        supabase.removeChannel(channel);
+      };
     };
+
+    setupChat();
   }, [conversationId, navigate, toast]);
 
   const sendMessage = async () => {
@@ -153,17 +197,17 @@ const Chat = () => {
           <ChevronLeft className="w-6 h-6" />
         </button>
         <div className="w-10 h-10 rounded-full overflow-hidden bg-secondary flex-shrink-0">
-          {checker?.avatar_url ? (
-            <img src={checker.avatar_url} alt="" className="w-full h-full object-cover" />
+          {partnerAvatar ? (
+            <img src={partnerAvatar} alt="" className="w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full flex items-center justify-center">
-              <User className="w-5 h-5 text-muted-foreground" />
+              <User className="w-6 h-6 text-muted-foreground" />
             </div>
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <h1 className="font-semibold text-foreground truncate">{checker?.display_name}</h1>
-          <p className="text-xs text-muted-foreground">متحقق</p>
+          <h2 className="font-bold text-foreground truncate">{partnerName}</h2>
+          <p className="text-[10px] text-online font-bold uppercase tracking-wider">متصل الآن</p>
         </div>
       </div>
 
@@ -182,11 +226,10 @@ const Chat = () => {
                 className={`flex ${isMe ? "justify-end" : "justify-start"}`}
               >
                 <div
-                  className={`max-w-[75%] px-4 py-2.5 rounded-2xl ${
-                    isMe
-                      ? "bg-primary text-primary-foreground rounded-br-md"
-                      : "bg-secondary text-secondary-foreground rounded-bl-md"
-                  }`}
+                  className={`max-w-[75%] px-4 py-2.5 rounded-2xl ${isMe
+                    ? "bg-primary text-primary-foreground rounded-br-md"
+                    : "bg-secondary text-secondary-foreground rounded-bl-md"
+                    }`}
                 >
                   <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
                   <p className={`text-[10px] mt-1 ${isMe ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
@@ -201,7 +244,7 @@ const Chat = () => {
       </div>
 
       {/* Input */}
-      <div className="sticky bottom-0 bg-card border-t border-border p-3 safe-bottom">
+      <div className="sticky bottom-[76px] bg-card border-t border-border p-3 safe-bottom z-10">
         <div className="flex items-center gap-2">
           <Input
             value={newMessage}
@@ -221,6 +264,8 @@ const Chat = () => {
           </Button>
         </div>
       </div>
+
+      <BottomNav />
     </div>
   );
 };

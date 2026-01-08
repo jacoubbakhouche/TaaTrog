@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { useQueryClient } from "@tanstack/react-query";
 
 const AVAILABLE_LANGUAGES = [
   "English", "Spanish", "French", "German", "Italian", "Portuguese",
@@ -26,6 +27,7 @@ const SOCIAL_PLATFORMS = [
 ];
 
 const CheckerProfile = () => {
+  const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -228,6 +230,7 @@ const CheckerProfile = () => {
 
       if (error) throw error;
 
+      await queryClient.invalidateQueries({ queryKey: ["checkers"] });
       toast.success("تم حفظ الملف الشخصي بنجاح");
     } catch (error) {
       console.error("Save error:", error);

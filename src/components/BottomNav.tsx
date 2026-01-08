@@ -8,8 +8,8 @@ export interface BottomNavProps {
 }
 
 const tabs = [
-  { id: "investigator", label: "Investigator", icon: Briefcase, badge: "NEW", path: "/" },
-  { id: "checkers", label: "Checkers", icon: Search, hasNotification: true, path: "/" },
+  { id: "investigator", label: "Investigator", icon: Briefcase, badge: "NEW", path: "/explore" },
+  { id: "checkers", label: "Checkers", icon: Search, hasNotification: true, path: "/explore" },
   { id: "account", label: "Account", icon: User, path: "/checker-profile" },
   { id: "messages", label: "Messages", icon: MessageSquare, hasNotification: true, path: "/messages" },
 ];
@@ -41,7 +41,7 @@ const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = currentTab === tab.id;
-          
+
           return (
             <button
               key={tab.id}

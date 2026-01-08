@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { User, MessageCircle } from "lucide-react";
+import BottomNav from "@/components/BottomNav";
 
 
 interface Conversation {
@@ -52,7 +53,19 @@ const Messages = () => {
       // Build query: user is client OR user is checker
       let query = supabase
         .from("conversations")
-        .select("*, checkers(*)")
+        .select(`
+          *,
+          checkers:checker_id (
+            id,
+            display_name,
+            avatar_url,
+            user_id
+          ),
+          profiles:user_id (
+            full_name,
+            avatar_url
+          )
+        `)
         .order("updated_at", { ascending: false });
 
       if (checkerId) {
@@ -61,7 +74,7 @@ const Messages = () => {
         query = query.eq("user_id", user.id);
       }
 
-      const { data: convs, error } = await query;
+      const { data: convs, error } = await query as any;
 
       if (error) {
         console.error("Error fetching conversations:", error);
@@ -71,14 +84,14 @@ const Messages = () => {
 
       // Fetch last message and unread count for each conversation
       const conversationsWithMessages = await Promise.all(
-        (convs || []).map(async (conv) => {
+        (convs || []).map(async (conv: any) => {
           const { data: lastMsg } = await supabase
             .from("messages")
             .select("*")
             .eq("conversation_id", conv.id)
             .order("created_at", { ascending: false })
             .limit(1)
-            .single();
+            .maybeSingle();
 
           const { count } = await supabase
             .from("messages")
@@ -95,12 +108,27 @@ const Messages = () => {
         })
       );
 
-      setConversations(conversationsWithMessages);
+      setConversations(conversationsWithMessages as any);
       setLoading(false);
     };
 
     fetchConversations();
   }, [navigate]);
+
+  const formatDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diff = now.getTime() - date.getTime();
+    const oneDay = 24 * 60 * 60 * 1000;
+
+    if (diff < oneDay && date.getDate() === now.getDate()) {
+      return date.toLocaleTimeString("ar-EG", { hour: "2-digit", minute: "2-digit" });
+    } else if (diff < oneDay * 7) {
+      return date.toLocaleDateString("ar-EG", { weekday: "short" });
+    } else {
+      return date.toLocaleDateString("ar-EG", { month: "short", day: "numeric" });
+    }
+  };
 
   if (loading) {
     return (
@@ -130,53 +158,63 @@ const Messages = () => {
             </p>
           </div>
         ) : (
-          conversations.map((conv) => (
-            <button
-              key={conv.id}
-              onClick={() => navigate(`/chat/${conv.id}`)}
-              className="w-full flex items-center gap-3 p-4 hover:bg-secondary/50 transition-colors text-right"
-            >
-              <div className="w-12 h-12 rounded-full overflow-hidden bg-secondary flex-shrink-0">
-                {conv.checkers?.avatar_url ? (
-                  <img
-                    src={conv.checkers.avatar_url}
-                    alt=""
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center">
-                    <User className="w-6 h-6 text-muted-foreground" />
+          conversations.map((conv: any) => {
+            const isImChecker = conv.checkers?.user_id === currentUserId;
+            const partnerName = isImChecker
+              ? (conv.profiles?.full_name || "عميل")
+              : conv.checkers?.display_name;
+            const partnerAvatar = isImChecker
+              ? conv.profiles?.avatar_url
+              : conv.checkers?.avatar_url;
+
+            return (
+              <button
+                key={conv.id}
+                onClick={() => navigate(`/chat/${conv.id}`)}
+                className="w-full flex items-center gap-3 p-4 hover:bg-secondary/50 transition-colors text-right"
+              >
+                <div className="w-12 h-12 rounded-full overflow-hidden bg-secondary flex-shrink-0">
+                  {partnerAvatar ? (
+                    <img
+                      src={partnerAvatar}
+                      alt=""
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <User className="w-6 h-6 text-muted-foreground" />
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between mb-1">
+                    <h3 className="font-semibold text-foreground truncate">
+                      {partnerName}
+                    </h3>
+                    {conv.last_message && (
+                      <span className="text-xs text-muted-foreground flex-shrink-0">
+                        {formatDate(conv.last_message.created_at)}
+                      </span>
+                    )}
                   </div>
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between mb-1">
-                  <h3 className="font-semibold text-foreground truncate">
-                    {conv.checkers?.display_name}
-                  </h3>
-                  {conv.last_message && (
-                    <span className="text-xs text-muted-foreground flex-shrink-0">
-                      {new Date(conv.last_message.created_at).toLocaleDateString("ar")}
-                    </span>
-                  )}
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-muted-foreground truncate">
+                      {conv.last_message?.content || "ابدأ المحادثة"}
+                    </p>
+                    {(conv.unread_count ?? 0) > 0 && (
+                      <span className="bg-primary text-primary-foreground text-xs w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0">
+                        {conv.unread_count}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center justify-between">
-                  <p className="text-sm text-muted-foreground truncate">
-                    {conv.last_message?.content || "ابدأ المحادثة"}
-                  </p>
-                  {(conv.unread_count ?? 0) > 0 && (
-                    <span className="bg-primary text-primary-foreground text-xs w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0">
-                      {conv.unread_count}
-                    </span>
-                  )}
-                </div>
-              </div>
-            </button>
-          ))
+              </button>
+            );
+          })
         )}
       </div>
 
-
+      <BottomNav />
     </div>
   );
 };

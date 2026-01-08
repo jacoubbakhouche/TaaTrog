@@ -83,7 +83,7 @@ export const HeroSection = () => {
                         {/* Main Image Container */}
                         <div className="relative z-10 rounded-[2.5rem] overflow-hidden border-8 border-white/10 shadow-2xl skew-y-[-2deg] hover:skew-y-0 transition-all duration-700">
                             <img
-                                src="/hero-mockup.png"
+                                src="/landing-hero.png"
                                 alt="App Mockup"
                                 className="w-full h-auto object-cover"
                             />

@@ -27,7 +27,7 @@ const Auth = () => {
           if (session.user.email === ADMIN_EMAIL) {
             navigate("/admin");
           } else {
-            navigate("/");
+            navigate("/explore");
           }
         }
       }
@@ -38,7 +38,7 @@ const Auth = () => {
         if (session.user.email === ADMIN_EMAIL) {
           navigate("/admin");
         } else {
-          navigate("/");
+          navigate("/explore");
         }
       }
     });
@@ -58,7 +58,7 @@ const Auth = () => {
     if (error) {
       toast({
         title: "خطأ في تسجيل الدخول",
-        description: error.message === "Invalid login credentials" 
+        description: error.message === "Invalid login credentials"
           ? "البريد الإلكتروني أو كلمة المرور غير صحيحة"
           : error.message,
         variant: "destructive",
@@ -75,7 +75,7 @@ const Auth = () => {
       email,
       password,
       options: {
-        emailRedirectTo: `${window.location.origin}/`,
+        emailRedirectTo: `${window.location.origin}/explore`,
       },
     });
 
@@ -94,7 +94,7 @@ const Auth = () => {
   };
 
   if (showSignupSteps) {
-    return <SignupSteps email={email} onComplete={() => navigate("/")} />;
+    return <SignupSteps email={email} onComplete={() => navigate("/explore")} />;
   }
 
   return (
@@ -124,21 +124,19 @@ const Auth = () => {
         <div className="flex items-center gap-2 bg-secondary rounded-full p-1 mb-8">
           <button
             onClick={() => setIsLogin(true)}
-            className={`flex-1 rounded-full px-4 py-3 text-sm font-semibold transition-all ${
-              isLogin
+            className={`flex-1 rounded-full px-4 py-3 text-sm font-semibold transition-all ${isLogin
                 ? "bg-card shadow-sm text-foreground"
                 : "text-muted-foreground"
-            }`}
+              }`}
           >
             تسجيل الدخول
           </button>
           <button
             onClick={() => setIsLogin(false)}
-            className={`flex-1 rounded-full px-4 py-3 text-sm font-semibold transition-all ${
-              !isLogin
+            className={`flex-1 rounded-full px-4 py-3 text-sm font-semibold transition-all ${!isLogin
                 ? "bg-card shadow-sm text-foreground"
                 : "text-muted-foreground"
-            }`}
+              }`}
           >
             إنشاء حساب
           </button>
@@ -202,8 +200,8 @@ const Auth = () => {
             {loading
               ? "جاري التحميل..."
               : isLogin
-              ? "تسجيل الدخول"
-              : "إنشاء حساب"}
+                ? "تسجيل الدخول"
+                : "إنشاء حساب"}
           </Button>
         </form>
 

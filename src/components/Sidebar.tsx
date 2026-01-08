@@ -55,18 +55,19 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
       description: "نراك قريباً!",
     });
     onClose();
+    navigate("/");
   };
 
   const isAdmin = user?.email === ADMIN_EMAIL;
 
   const menuItems = [
-    { icon: Briefcase, label: "Missions", action: () => {} },
-    { icon: User, label: "Account", action: () => {} },
-    { icon: UserSearch, label: "Investigator", badge: "NEW", action: () => {} },
-    { icon: ChevronDown, label: "Contact us", isExpandable: true, action: () => {} },
-    { icon: FileText, label: "Blog", action: () => {} },
-    { icon: HelpCircle, label: "Help Center", action: () => {} },
-    { icon: Bell, label: "Get notification", action: () => {} },
+    { icon: Briefcase, label: "Missions", action: () => { } },
+    { icon: User, label: "Account", action: () => { } },
+    { icon: UserSearch, label: "Investigator", badge: "NEW", action: () => { } },
+    { icon: ChevronDown, label: "Contact us", isExpandable: true, action: () => { } },
+    { icon: FileText, label: "Blog", action: () => { } },
+    { icon: HelpCircle, label: "Help Center", action: () => { } },
+    { icon: Bell, label: "Get notification", action: () => { } },
   ];
 
   return (
@@ -89,12 +90,18 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
       >
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-sidebar-border">
-          <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              navigate(user ? "/explore" : "/");
+              onClose();
+            }}
+            className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+          >
             <div className="w-8 h-8 rounded-lg bg-sidebar-foreground flex items-center justify-center">
               <span className="text-sidebar font-bold text-lg">T</span>
             </div>
-            <span className="text-sidebar-foreground font-bold text-xl">TrustCheck</span>
-          </div>
+            <span className="text-sidebar-foreground font-bold text-xl">رابط الثقة</span>
+          </button>
           <button
             onClick={onClose}
             className="text-sidebar-foreground/80 hover:text-sidebar-foreground transition-colors"

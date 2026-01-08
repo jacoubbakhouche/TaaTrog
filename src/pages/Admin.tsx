@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { 
-  ArrowLeft, Check, X, Clock, User, Calendar, Globe, MessageSquare, 
-  Users, Shield, FileText, BarChart3, Settings, Power, PowerOff 
+import {
+  ArrowLeft, Check, X, Clock, User, Calendar, Globe, MessageSquare,
+  Users, Shield, FileText, BarChart3, Settings, Power, PowerOff
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -56,6 +56,27 @@ const Admin = () => {
   const [stats, setStats] = useState<Stats>({ totalCheckers: 0, activeCheckers: 0, pendingRequests: 0, totalTests: 0 });
   const [processing, setProcessing] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
+  const [pendingPayments, setPendingPayments] = useState<any[]>([]);
+
+  const handleActivateChat = async (paymentId: string) => {
+    setProcessing(paymentId);
+    try {
+      const { error } = await supabase
+        .from('conversations')
+        .update({ status: 'paid' } as any)
+        .eq('id', paymentId);
+
+      if (error) throw error;
+
+      toast.success("تم تفعيل المحادثة بنجاح ✅");
+      loadData();
+    } catch (e) {
+      console.error(e);
+      toast.error("فشل التفعيل");
+    } finally {
+      setProcessing(null);
+    }
+  };
 
   useEffect(() => {
     checkAdminAccess();
@@ -63,7 +84,7 @@ const Admin = () => {
 
   const checkAdminAccess = async () => {
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user || user.email !== ADMIN_EMAIL) {
       toast.error("غير مصرح لك بالدخول");
       navigate("/");
@@ -76,10 +97,19 @@ const Admin = () => {
   const loadData = async () => {
     try {
       // Load all data in parallel
-      const [requestsRes, checkersRes, testsRes] = await Promise.all([
+      const [requestsRes, checkersRes, testsRes, paymentsRes] = await Promise.all([
         supabase.from("checker_requests").select("*").order("created_at", { ascending: false }),
         supabase.from("checkers").select("*").order("created_at", { ascending: false }),
         supabase.from("loyalty_tests").select("id", { count: "exact" }),
+        supabase
+          .from("conversations")
+          .select(`
+            id, user_id, checker_id, status, created_at, price, receipt_url,
+            checkers (display_name),
+            profiles!conversations_user_id_fkey (full_name)
+          `)
+          .eq("status", "payment_pending")
+          .order("created_at", { ascending: false })
       ]);
 
       if (requestsRes.error) throw requestsRes.error;
@@ -87,9 +117,11 @@ const Admin = () => {
 
       const requestsData = (requestsRes.data as CheckerRequest[]) || [];
       const checkersData = (checkersRes.data as Checker[]) || [];
+      const paymentsData = (paymentsRes.data as any[]) || [];
 
       setRequests(requestsData);
       setCheckers(checkersData);
+      setPendingPayments(paymentsData);
       setStats({
         totalCheckers: checkersData.length,
         activeCheckers: checkersData.filter(c => c.is_active).length,
@@ -257,6 +289,10 @@ const Admin = () => {
               <Users className="w-4 h-4" />
               <span className="hidden sm:inline">المتحققون</span>
             </TabsTrigger>
+            <TabsTrigger value="payments" className="flex items-center gap-1">
+              <Shield className="w-4 h-4" />
+              <span className="hidden sm:inline">الدفعات</span>
+            </TabsTrigger>
           </TabsList>
 
           {/* Overview Tab */}
@@ -326,8 +362,8 @@ const Admin = () => {
               </CardHeader>
               <CardContent className="space-y-2">
                 {stats.pendingRequests > 0 && (
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     className="w-full justify-start"
                     onClick={() => setActiveTab("requests")}
                   >
@@ -335,8 +371,8 @@ const Admin = () => {
                     مراجعة {stats.pendingRequests} طلب معلق
                   </Button>
                 )}
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="w-full justify-start"
                   onClick={() => setActiveTab("checkers")}
                 >
@@ -407,6 +443,19 @@ const Admin = () => {
                             </div>
                           )}
 
+                          {request.social_media && Object.keys(request.social_media).filter(k => request.social_media[k]).length > 0 && (
+                            <div className="flex items-center gap-2">
+                              <Globe className="w-4 h-4 text-muted-foreground" />
+                              <div className="flex flex-wrap gap-1">
+                                {Object.keys(request.social_media).filter(k => request.social_media[k]).map(platform => (
+                                  <Badge key={platform} variant="outline" className="text-[10px] capitalize bg-primary/5">
+                                    {platform}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
                           <p className="text-xs text-muted-foreground">
                             تاريخ التقديم: {new Date(request.created_at).toLocaleDateString("ar")}
                           </p>
@@ -464,7 +513,7 @@ const Admin = () => {
                           </div>
                         </div>
                       </div>
-                      
+
                       <div className="flex items-center gap-2">
                         <div className="flex flex-col items-end gap-1">
                           <Badge variant={checker.is_active ? "default" : "secondary"} className={checker.is_active ? "bg-green-500" : ""}>
@@ -483,7 +532,7 @@ const Admin = () => {
                         />
                       </div>
                     </div>
-                    
+
                     <div className="mt-3 pt-3 border-t border-border grid grid-cols-3 gap-2 text-sm text-center">
                       <div>
                         <p className="font-medium">{checker.price || 0} دج</p>
@@ -504,6 +553,45 @@ const Admin = () => {
                 </Card>
               ))
             )}
+            {/* Payments/Tests Tab */}
+            <TabsContent value="payments" className="space-y-4">
+              {pendingPayments.length === 0 ? (
+                <div className="text-center py-10 text-muted-foreground">
+                  لا توجد طلبات دفع معلقة حالياً.
+                </div>
+              ) : (
+                <div className="grid gap-4">
+                  {pendingPayments.map((payment: any) => (
+                    <Card key={payment.id}>
+                      <CardContent className="pt-6 flex items-center justify-between">
+                        <div>
+                          <h3 className="font-bold text-lg">طلب تفعيل محادثة</h3>
+                          <div className="text-sm text-muted-foreground space-y-1 mt-1">
+                            <p>العميل: <span className="text-foreground">{payment.profiles?.full_name || "غير معروف"}</span></p>
+                            <p>المتحقق المستهدف: <span className="text-foreground">{payment.checkers?.display_name || "غير معروف"}</span></p>
+                            <p>المبلغ: <span className="font-mono">{payment.price || 0} USD</span></p>
+                            <p className="text-xs">التاريخ: {new Date(payment.created_at).toLocaleDateString("ar")}</p>
+                          </div>
+                          {payment.receipt_url && (
+                            <a href={payment.receipt_url} target="_blank" rel="noopener noreferrer" className="text-blue-500 text-sm hover:underline mt-2 inline-block">
+                              📎 عرض إيصال الدفع
+                            </a>
+                          )}
+                        </div>
+                        <Button
+                          onClick={() => handleActivateChat(payment.id)}
+                          disabled={processing === payment.id}
+                          className="bg-green-600 hover:bg-green-700 text-white"
+                        >
+                          <Check className="w-4 h-4 mr-2" />
+                          تفعيل المحادثة
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
           </TabsContent>
         </Tabs>
       </div>

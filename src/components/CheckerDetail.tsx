@@ -1,4 +1,4 @@
-import { Star, Trophy, User, X } from "lucide-react";
+import { Star, Trophy, User, X, Instagram, Facebook, MessageCircle, Ghost, Music2, Send, Twitter } from "lucide-react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
@@ -67,9 +67,9 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
       if (!user || !checker) return;
 
       const { data } = await supabase
-        .from("bookings")
+        .from("conversations")
         .select("id, status")
-        .eq("client_id", user.id)
+        .eq("user_id", user.id)
         .eq("checker_id", checker.id)
         .maybeSingle();
 
@@ -91,10 +91,14 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
     : [];
 
   const handlePaymentSuccess = () => {
-    // Payment successful, maybe refresh or navigate
     toast.success("تم الدفع بنجاح", { description: "جاري فتح المحادثة..." });
-    // TODO: Navigate to chat
-    // For now, assume chat creation logic will be here or handled
+    setBooking(prev => prev ? { ...prev, status: 'paid' } : null);
+    if (booking?.id) {
+      setTimeout(() => {
+        navigate(`/chat/${booking.id}`);
+        onClose();
+      }, 1500);
+    }
   };
 
   const handleRequestTest = async () => {
@@ -127,14 +131,14 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
     }
 
     // Create a booking with status 'pending_approval' immediately
-    console.log("Creating booking for checker:", checker.id);
+    console.log("Creating conversation for checker:", checker.id);
     const { data: newBooking, error } = await supabase
-      .from("bookings")
+      .from("conversations")
       .insert({
-        client_id: user.id,
-        user_id: user.id, // Adding user_id as it might be required by RLS or NOT NULL constraint
+        user_id: user.id,
+        client_id: user.id, // Providing both as per suspected schema/types mismatch
         checker_id: checker.id,
-        status: "pending_approval", // Using a status we know exists while still opening payment modal
+        status: "pending_approval",
         price: checker.price || 0
       })
       .select()
@@ -282,20 +286,27 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
               <div>
                 <h3 className="text-xs font-black text-muted-foreground/60 uppercase tracking-[0.2em] mb-4">قنوات الاختبار المعتمدة</h3>
                 <div className="grid grid-cols-2 gap-3">
-                  {socialPlatforms.map(([platform]) => (
-                    <div key={platform} className="flex items-center gap-3 bg-secondary/30 border border-border/40 p-3 rounded-[1.2rem] shadow-sm hover:border-primary/20 transition-all group/platform">
-                      <div className="w-10 h-10 rounded-xl bg-background flex items-center justify-center text-xl shadow-inner group-hover/platform:scale-110 transition-transform">
-                        {platform === "instagram" && "📷"}
-                        {platform === "facebook" && "📘"}
-                        {platform === "snapchat" && "👻"}
-                        {platform === "whatsapp" && "💬"}
-                        {platform === "tiktok" && "🎵"}
-                        {platform === "telegram" && "✈️"}
-                        {platform === "twitter" && "🐦"}
+                  {socialPlatforms.map(([platform]) => {
+                    let Icon = User;
+                    let label = platform;
+
+                    if (platform === "instagram") { Icon = Instagram; label = "إنستقرام"; }
+                    if (platform === "facebook") { Icon = Facebook; label = "فيسبوك"; }
+                    if (platform === "snapchat") { Icon = Ghost; label = "سناب شات"; }
+                    if (platform === "whatsapp") { Icon = MessageCircle; label = "واتساب"; }
+                    if (platform === "tiktok") { Icon = Music2; label = "تيك توك"; }
+                    if (platform === "telegram") { Icon = Send; label = "تيليجرام"; }
+                    if (platform === "twitter") { Icon = Twitter; label = "منصة X"; }
+
+                    return (
+                      <div key={platform} className="flex items-center gap-3 bg-secondary/30 border border-border/40 p-3 rounded-[1.2rem] shadow-sm hover:border-primary/20 transition-all group/platform">
+                        <div className="w-10 h-10 rounded-xl bg-background flex items-center justify-center shadow-inner group-hover/platform:scale-110 transition-transform">
+                          <Icon className="w-5 h-5 text-primary" />
+                        </div>
+                        <span className="text-sm font-black tracking-tight whitespace-nowrap">{label}</span>
                       </div>
-                      <span className="text-sm font-black capitalize tracking-tight whitespace-nowrap">{platform}</span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Camera, Facebook, Instagram, MessageCircle, Phone, User } from "lucide-react";
+import { ArrowLeft, Camera, Facebook, Instagram, MessageCircle, Phone, User, Ghost, Music2, Send, Twitter } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -13,10 +14,13 @@ import { supabase } from "@/integrations/supabase/client";
 const AVAILABLE_LANGUAGES = ["العربية", "English", "Français", "Español"];
 
 const SOCIAL_PLATFORMS = [
-  { key: "facebook", label: "Facebook", icon: Facebook, placeholder: "رابط Facebook" },
-  { key: "instagram", label: "Instagram", icon: Instagram, placeholder: "رابط Instagram" },
-  { key: "snapchat", label: "Snapchat", icon: Camera, placeholder: "اسم Snapchat" },
-  { key: "whatsapp", label: "WhatsApp", icon: Phone, placeholder: "رقم WhatsApp" },
+  { key: "instagram", label: "Instagram", icon: Instagram },
+  { key: "snapchat", label: "Snapchat", icon: Ghost },
+  { key: "tiktok", label: "TikTok", icon: Music2 },
+  { key: "whatsapp", label: "WhatsApp", icon: MessageCircle },
+  { key: "telegram", label: "Telegram", icon: Send },
+  { key: "facebook", label: "Facebook", icon: Facebook },
+  { key: "twitter", label: "X (Twitter)", icon: Twitter },
 ];
 
 const BecomeChecker = () => {
@@ -333,32 +337,43 @@ const BecomeChecker = () => {
           <h2 className="text-lg font-bold text-foreground" dir="rtl">منصات التحقق المتاحة</h2>
           <p className="text-sm text-muted-foreground mb-4" dir="rtl">اختر المنصات التي يمكنك تنفيذ عمليات التحقق من خلالها</p>
 
-          {SOCIAL_PLATFORMS.map((platform) => {
-            const Icon = platform.icon;
-            const isChecked = !!formData.social_media[platform.key as keyof typeof formData.social_media];
+          <div className="grid grid-cols-2 gap-3">
+            {SOCIAL_PLATFORMS.map((platform) => {
+              const Icon = platform.icon;
+              const isChecked = !!formData.social_media[platform.key as keyof typeof formData.social_media];
 
-            return (
-              <div key={platform.key} className="flex items-center gap-3 p-3 border rounded-xl hover:bg-secondary/50 transition-colors">
-                <Checkbox
-                  id={`platform-${platform.key}`}
-                  checked={isChecked}
-                  onCheckedChange={(checked) => {
-                    updateSocialMedia(platform.key, checked ? "available" : "");
+              return (
+                <div
+                  key={platform.key}
+                  onClick={() => {
+                    updateSocialMedia(platform.key, isChecked ? "" : "available");
                   }}
-                  className="w-5 h-5 border-2"
-                />
-                <Label
-                  htmlFor={`platform-${platform.key}`}
-                  className="flex-1 flex items-center gap-3 cursor-pointer"
+                  className={cn(
+                    "flex items-center gap-3 p-3 rounded-2xl border-2 transition-all cursor-pointer select-none",
+                    isChecked
+                      ? "bg-primary/10 border-primary shadow-sm"
+                      : "bg-card border-border hover:border-primary/30"
+                  )}
                 >
-                  <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center">
-                    <Icon className="w-4 h-4 text-foreground" />
+                  <div className={cn(
+                    "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors",
+                    isChecked ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"
+                  )}>
+                    <Icon className="w-4 h-4" />
                   </div>
-                  <span className="font-medium text-base">{platform.label}</span>
-                </Label>
-              </div>
-            );
-          })}
+                  <span className={cn(
+                    "text-sm font-bold tracking-tight",
+                    isChecked ? "text-foreground" : "text-muted-foreground"
+                  )}>
+                    {platform.label}
+                  </span>
+                  {isChecked && (
+                    <div className="ml-auto w-2 h-2 rounded-full bg-primary animate-pulse" />
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </section>
 
         {/* Submit Button */}
