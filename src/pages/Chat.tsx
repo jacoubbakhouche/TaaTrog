@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
-import { ChevronLeft, Send, User } from "lucide-react";
+import { ChevronLeft, Send, User, Shield } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 
@@ -71,6 +71,7 @@ const Chat = () => {
   const [conversationPrice, setConversationPrice] = useState<number>(0);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isImChecker, setIsImChecker] = useState(false);
+  const [activationRequest, setActivationRequest] = useState<any>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -80,7 +81,7 @@ const Chat = () => {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, activationRequest]); // Scroll when banner appears too
 
   useEffect(() => {
     const setupChat = async () => {
@@ -115,6 +116,20 @@ const Chat = () => {
         user.id !== conv.user_id
       );
       setIsImChecker(!!imChecker);
+
+      // 2.5 If Admin/Support, Check for Activation Requests
+      if (imChecker && conv.status === 'payment_negotiation') {
+        const { data: req } = await supabase
+          .from('activation_requests')
+          .select('*, conversations(id)') // Join to confirm exists
+          .eq('user_id', conv.user_id)
+          .eq('status', 'pending')
+          .maybeSingle();
+
+        if (req) {
+          setActivationRequest(req);
+        }
+      }
 
       let partnerNameFound = "مستخدم";
       let partnerAvatarFound = null;
@@ -378,6 +393,58 @@ const Chat = () => {
 
 
 
+      {/* Admin Activation Banner */}
+      {isImChecker && activationRequest && (
+        <div className="bg-yellow-50 md:bg-yellow-500/10 border-b border-yellow-200 p-4 flex flex-col sm:flex-row items-center justify-between gap-4 sticky top-[65px] z-10 backdrop-blur-md animate-in slide-in-from-top-2">
+          <div className="flex items-center gap-3">
+            <div className="bg-yellow-100 p-2 rounded-full">
+              <Shield className="w-5 h-5 text-yellow-600" />
+            </div>
+            <div>
+              <p className="font-bold text-sm text-yellow-900 dark:text-yellow-100">طلب تفعيل خدمة معلق</p>
+              <p className="text-xs text-yellow-700 dark:text-yellow-300">هذا المستخدم يريد تفعيل المحادثة رقم #{activationRequest.conversation_id.substring(0, 6)}</p>
+            </div>
+          </div>
+          <Button
+            onClick={async () => {
+              try {
+                toast({ title: "جاري التفعيل...", description: "لحظات من فضلك" });
+
+                // 1. Update Request
+                const { error: reqError } = await supabase
+                  .from('activation_requests')
+                  .update({ status: 'approved' } as any)
+                  .eq('id', activationRequest.id);
+                if (reqError) throw reqError;
+
+                // 2. Update Conversation
+                const { error: convError } = await supabase
+                  .from('conversations')
+                  .update({ status: 'paid' } as any)
+                  .eq('id', activationRequest.conversation_id);
+                if (convError) throw convError;
+
+                // 3. Notify User in Chat
+                await supabase.from("messages").insert({
+                  conversation_id: conversationId, // Current support chat
+                  sender_id: currentUserId,
+                  content: `✅ تم تفعيل المحادثة (#${activationRequest.conversation_id.substring(0, 6)}) بنجاح! يمكنك الآن العودة لتلك المحادثة.`
+                });
+
+                toast({ title: "تم التفعيل بنجاح! 🎉", description: "تم تحديث حالة العميل." });
+                setActivationRequest(null); // Hide banner
+              } catch (e) {
+                console.error(e);
+                toast({ title: "خطأ", description: "حدث خطأ أثناء التفعيل", variant: "destructive" });
+              }
+            }}
+            className="bg-green-600 hover:bg-green-700 text-white w-full sm:w-auto shadow-lg"
+          >
+            تفعيل المحادثة الآن ✅
+          </Button>
+        </div>
+      )}
+
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
         {messages.length === 0 ? (
@@ -536,17 +603,28 @@ const Chat = () => {
                             targetConvId = newConv.id;
                           }
 
-                          // 4. Send Context Message
+                          // 4. Create Activation Request (So Admin sees it in Dashboard)
+                          const { data: currentConv } = await supabase
+                            .from('conversations')
+                            .select('checker_id')
+                            .eq('id', conversationId)
+                            .single();
+
+                          if (currentConv) {
+                            await supabase.from('activation_requests').insert({
+                              user_id: currentUserId,
+                              conversation_id: conversationId,
+                              checker_id: currentConv.checker_id, // The checker of the locked chat
+                              status: 'pending'
+                            });
+                          }
+
+                          // 5. Send Context Message
                           await supabase.from('messages').insert({
                             conversation_id: targetConvId,
                             sender_id: currentUserId,
                             content: `السلام عليكم، أريد تفعيل المحادثة رقم #${conversationId} (مع ${partnerName}) عن طريق الدفع اليدوي (CCP/BaridiMob).`
                           });
-
-                          // 5. Update Original Chat Status to indicate "User Requested Payment"?
-                          // Maybe not strictly needed if we just rely on Support chat, but good for UI feedback.
-                          // User said: "Original chat stays closed".
-                          // So we don't change original chat status yet. Admin will change it to 'paid'.
 
                           navigate(`/chat/${targetConvId}`);
 

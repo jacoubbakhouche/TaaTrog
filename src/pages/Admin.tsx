@@ -58,6 +58,7 @@ const Admin = () => {
   const [processing, setProcessing] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
   const [supportMessages, setSupportMessages] = useState<any[]>([]);
+  const [activationRequests, setActivationRequests] = useState<any[]>([]);
   const [pendingPayments, setPendingPayments] = useState<any[]>([]);
   const [currentUser, setCurrentUser] = useState<any>(null);
 
@@ -144,19 +145,21 @@ const Admin = () => {
         supabase.from("checker_requests").select("*").order("created_at", { ascending: false }),
         supabase.from("checkers").select("*").order("created_at", { ascending: false }),
         supabase.from("loyalty_tests").select("id", { count: "exact" }),
-        supabase.from("loyalty_tests").select("id", { count: "exact" }),
+        supabase.from("activation_requests")
+          .select("*, profiles:user_id(full_name), checkers:checker_id(display_name)")
+          .order("created_at", { ascending: false }),
         // Support Messages (Payment Negotiations) - This is the PRIMARY way now
         supabase
           .from("conversations")
           .select(`
             id, user_id, status, created_at,
-            profiles!conversations_user_id_fkey (full_name, avatar_url)
+            profiles (full_name, avatar_url)
           `)
           .eq("status", "payment_negotiation")
           .order("created_at", { ascending: false })
       ]);
 
-      const [requestsRes, checkersRes, testsRes, supportRes] = results;
+      const [requestsRes, checkersRes, testsRes, activRes, supportRes] = results;
 
       // Helper to process results
       const processResult = (res: PromiseSettledResult<any>, name: string) => {
@@ -174,16 +177,18 @@ const Admin = () => {
       const requestsData = processResult(requestsRes, "checker_requests");
       const checkersData = processResult(checkersRes, "checkers");
       const testsData = processResult(testsRes, "loyalty_tests");
+      const activationData = processResult(activRes, "activation_requests");
       const supportData = processResult(supportRes, "conversations (support)");
 
       setRequests((requestsData.data as CheckerRequest[]) || []);
       setCheckers((checkersData.data as Checker[]) || []);
+      setActivationRequests((activationData.data as any[]) || []);
       setSupportMessages((supportData.data as any[]) || []);
 
       setStats({
         totalCheckers: checkersData.data?.length || 0,
         activeCheckers: (checkersData.data as Checker[])?.filter(c => c.is_active).length || 0,
-        pendingRequests: (requestsData.data as CheckerRequest[])?.filter(r => r.status === "pending").length || 0,
+        pendingRequests: (activationData.data as any[])?.filter(r => r.status === "pending").length || 0,
         totalTests: testsData.count || 0,
       });
 
@@ -654,32 +659,68 @@ const Admin = () => {
             )}
           </TabsContent>
 
-          {/* Messages Tab */}
-          <TabsContent value="messages" className="space-y-4">
-            {supportMessages.length === 0 ? (
-              <div className="text-center py-10 text-muted-foreground">
-                لا توجد مفاوضات دفع حالية.
-              </div>
-            ) : (
-              <div className="grid gap-4">
-                {supportMessages.map((msg: any) => (
-                  <Card key={msg.id} className="cursor-pointer hover:bg-accent/5 transition-colors" onClick={() => navigate(`/chat/${msg.id}`)}>
-                    <CardContent className="p-4 flex items-center gap-4">
-                      <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
-                        <MessageSquare className="w-6 h-6 text-blue-600" />
+          {/* Messages & Activations Tab */}
+          <TabsContent value="messages" className="space-y-6">
+
+            {/* 1. Pending Activation Requests */}
+            {activationRequests.filter(r => r.status === 'pending').length > 0 && (
+              <div className="space-y-3">
+                <h3 className="font-bold text-lg flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+                  طلبات تفعيل المحادثات ({activationRequests.filter(r => r.status === 'pending').length})
+                </h3>
+                {activationRequests.filter(r => r.status === 'pending').map((req) => (
+                  <Card key={req.id} className="border-l-4 border-l-green-500 shadow-sm">
+                    <CardContent className="p-4 flex items-center justify-between">
+                      <div>
+                        <p className="font-bold text-base">طلب تفعيل محادثة</p>
+                        <div className="text-sm text-muted-foreground mt-1 space-y-1">
+                          <p>👤 العميل: {req.profiles?.full_name || "غير معروف"}</p>
+                          <p>🕵️ المتحقق: {req.checkers?.display_name || "غير معروف"}</p>
+                          <p className="text-xs">📅 {new Date(req.created_at).toLocaleDateString('ar')}</p>
+                        </div>
                       </div>
-                      <div className="flex-1">
-                        <h3 className="font-bold text-lg flex items-center justify-between">
-                          <span>{msg.profiles?.full_name || "عميل"}</span>
-                          <span className="text-xs font-normal text-muted-foreground">{new Date(msg.created_at).toLocaleString('ar')}</span>
-                        </h3>
-                        <p className="text-sm text-muted-foreground">اضغط لفتح المحادثة والمتابعة.</p>
-                      </div>
+                      <Button
+                        onClick={() => handleActivateChat(req.id)}
+                        disabled={processing === req.id}
+                        className="bg-green-600 hover:bg-green-700 text-white"
+                      >
+                        {processing === req.id ? "جاري التفعيل..." : "✅ تفعيل الآن"}
+                      </Button>
                     </CardContent>
                   </Card>
                 ))}
               </div>
             )}
+
+            <div className="space-y-3">
+              <h3 className="font-bold text-lg text-muted-foreground">سجل المحادثات مع العملاء</h3>
+
+              {supportMessages.length === 0 ? (
+                <div className="text-center py-10 text-muted-foreground">
+                  لا توجد مفاوضات دفع حالية.
+                </div>
+              ) : (
+                <div className="grid gap-4">
+                  {supportMessages.map((msg: any) => (
+                    <Card key={msg.id} className="cursor-pointer hover:bg-accent/5 transition-colors" onClick={() => navigate(`/chat/${msg.id}`)}>
+                      <CardContent className="p-4 flex items-center gap-4">
+                        <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
+                          <MessageSquare className="w-6 h-6 text-blue-600" />
+                        </div>
+                        <div className="flex-1">
+                          <h3 className="font-bold text-lg flex items-center justify-between">
+                            <span>{msg.profiles?.full_name || "عميل"}</span>
+                            <span className="text-xs font-normal text-muted-foreground">{new Date(msg.created_at).toLocaleString('ar')}</span>
+                          </h3>
+                          <p className="text-sm text-muted-foreground">اضغط لفتح المحادثة والمتابعة.</p>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </div>
           </TabsContent>
         </Tabs>
       </div>
