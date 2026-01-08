@@ -82,9 +82,20 @@ const Messages = () => {
         return;
       }
 
+      // Filter out 'payment_negotiation' chats IF I am the checker (Admin)
+      // because these should only appear in the Admin Dashboard.
+      const filteredConvs = (convs || []).filter((conv: any) => {
+        const checkerUserId = conv.checkers?.user_id;
+        // If I am the checker AND it is a payment negotiation, hide it
+        if (checkerUserId === user.id && conv.status === 'payment_negotiation') {
+          return false;
+        }
+        return true;
+      });
+
       // Fetch last message and unread count for each conversation
       const conversationsWithMessages = await Promise.all(
-        (convs || []).map(async (conv: any) => {
+        filteredConvs.map(async (conv: any) => {
           const { data: lastMsg } = await supabase
             .from("messages")
             .select("*")
