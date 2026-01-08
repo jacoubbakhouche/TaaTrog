@@ -365,7 +365,7 @@ const Chat = () => {
             <div className="flex-1">
               <h3 className="font-bold text-sm text-yellow-700 mb-1">طلب تفعيل محادثة جديد</h3>
               <p className="text-xs text-yellow-700/80 mb-3">
-                يريد هذا العميل تفعيل محادثة مع <strong>{pendingActivationRequest.checkers?.display_name}</strong>.
+                يريد هذا العميل تفعيل محادثة مع <strong>{pendingActivationRequest.checker_name}</strong>.
               </p>
               <div className="flex gap-2">
                 <Button
