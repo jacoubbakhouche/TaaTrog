@@ -275,32 +275,7 @@ const Chat = () => {
     }
   };
 
-  const handleAdminActivateRequest = async () => {
-    if (!pendingActivationRequest) return;
 
-    try {
-      const { error } = await supabase
-        .from('conversations')
-        .update({ status: 'paid' } as any)
-        .eq('id', pendingActivationRequest.id);
-
-      if (error) throw error;
-
-      toast({ title: "تم التفعيل", description: "تم تفعيل المحادثة المطلوبة بنجاح" });
-      setPendingActivationRequest(null);
-
-      // Send confirmation message
-      await supabase.from("messages").insert({
-        conversation_id: conversationId,
-        sender_id: currentUserId,
-        content: `✅ تم تفعيل المحادثة مع ${pendingActivationRequest.checkers?.display_name} بنجاح! يمكنك العودة لقائمة الرسائل وبدء الحديث معه الآن.`
-      });
-
-    } catch (e) {
-      console.error(e);
-      toast({ title: "خطأ", description: "فشل التفعيل", variant: "destructive" });
-    }
-  };
 
   const sendMessage = async () => {
     if (!newMessage.trim() || !currentUserId || sending) return;
