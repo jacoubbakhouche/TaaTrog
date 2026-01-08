@@ -114,19 +114,10 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
       return;
     }
 
-    // If already paid or handling payment, just open modal
-    // Note: We now open it for 'pending_approval' too to support Payment First
-    if (booking?.status === 'payment_pending' || booking?.status === 'approved' || booking?.status === 'pending_approval') {
-      console.log("Existing booking found, opening PaymentModal");
-      setPaymentOpen(true);
-      setLoading(false);
-      return;
-    }
-
-    // If already paid and active
-    if (booking?.status === 'paid') {
-      toast.info("لديك طلب دفع مسبقاً لهذا المتحقق");
-      setLoading(false);
+    if (booking?.id) {
+      console.log("Existing booking found, navigating to chat");
+      navigate(`/chat/${booking.id}`);
+      onClose();
       return;
     }
 
@@ -146,12 +137,11 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
 
     if (error) {
       console.error("Supabase error creating booking:", error);
-      // Detailed toast for debugging if needed, but keeping it clean for user
       toast.error("فشل إنشاء الطلب", { description: "يرجى المحاولة مرة أخرى أو الاتصال بالدعم" });
     } else {
-      console.log("New booking created, opening PaymentModal");
-      setBooking({ id: newBooking.id, status: newBooking.status });
-      setPaymentOpen(true);
+      console.log("New booking created, navigating to chat");
+      navigate(`/chat/${newBooking.id}`);
+      onClose();
     }
     setLoading(false);
   };
@@ -362,14 +352,10 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
             <div className="pt-2 pb-6">
               <Button
                 onClick={handleRequestTest}
-                disabled={loading || booking?.status === 'rejected' || booking?.status === 'paid'}
+                disabled={loading || booking?.status === 'rejected'}
                 className={cn(
                   "w-full py-8 text-xl font-black rounded-3xl shadow-[0_20px_40px_-12px_rgba(var(--primary),0.25)] transition-all transform active:scale-[0.98] group",
-                  booking?.status === 'paid'
-                    ? "bg-green-600 hover:bg-green-700 text-white"
-                    : booking?.status === 'rejected'
-                      ? "bg-destructive/80 text-white cursor-not-allowed"
-                      : "bg-gradient-primary hover:shadow-[0_25px_50px_-12px_rgba(var(--primary),0.35)]"
+                  "bg-gradient-primary hover:shadow-[0_25px_50px_-12px_rgba(var(--primary),0.35)]"
                 )}
               >
                 {loading ? (
@@ -377,18 +363,14 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
                     <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                     <span>جاري التحميل...</span>
                   </div>
-                ) :
-                  booking?.status === 'payment_pending' || booking?.status === 'approved' || booking?.status === 'pending_approval' ? "إكمال عملية الدفع الآن" :
-                    booking?.status === 'paid' ? "تم الدفع - الطلب نشط" :
-                      booking?.status === 'rejected' ? "تم رفض الطلب" :
-                        (
-                          <div className="flex items-center justify-center gap-3">
-                            <span>بدء اختبار وفاء (دفع مباشر)</span>
-                            <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center group-hover:translate-x-[-4px] transition-transform">
-                              <Star className="w-4 h-4 fill-white" />
-                            </div>
-                          </div>
-                        )}
+                ) : (
+                  <div className="flex items-center justify-center gap-3">
+                    <span>تحدث الآن 💬</span>
+                    <div className="w-8 h-8 rounded-full bg-white/10 flex items-center justify-center group-hover:translate-x-[-4px] transition-transform">
+                      <Send className="w-4 h-4 fill-white" />
+                    </div>
+                  </div>
+                )}
               </Button>
               <p className="text-[10px] text-center text-muted-foreground mt-4 font-bold uppercase tracking-widest opacity-60">
                 ضمان استرداد الأموال 100% في حال عدم الرضا

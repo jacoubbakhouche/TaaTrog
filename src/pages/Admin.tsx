@@ -57,6 +57,7 @@ const Admin = () => {
   const [processing, setProcessing] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
   const [supportMessages, setSupportMessages] = useState<any[]>([]);
+  const [pendingPayments, setPendingPayments] = useState<any[]>([]);
 
   const handleActivateChat = async (paymentId: string) => {
     setProcessing(paymentId);
@@ -281,7 +282,7 @@ const Admin = () => {
       <header className="sticky top-0 bg-card/95 backdrop-blur-md z-30 border-b border-border">
         <div className="flex items-center gap-4 px-4 py-3">
           <button
-            onClick={() => navigate("/")}
+            onClick={() => navigate("/explore")}
             className="w-10 h-10 rounded-full bg-secondary flex items-center justify-center"
           >
             <ArrowLeft className="w-5 h-5" />
@@ -315,11 +316,11 @@ const Admin = () => {
             </TabsTrigger>
             <TabsTrigger value="payments" className="flex items-center gap-1">
               <Shield className="w-4 h-4" />
-              <span className="hidden sm:inline">الدفعات</span>
+              <span className="hidden sm:inline">تفعيل المحادثات</span>
             </TabsTrigger>
             <TabsTrigger value="messages" className="flex items-center gap-1">
               <MessageSquare className="w-4 h-4" />
-              <span className="hidden sm:inline">الرسائل</span>
+              <span className="hidden sm:inline">مهافهمات الدفع</span>
               {supportMessages.length > 0 && (
                 <Badge className="ml-1 h-5 w-5 p-0 flex items-center justify-center bg-blue-500">
                   {supportMessages.length}
@@ -594,56 +595,57 @@ const Admin = () => {
                 </Card>
               ))
             )}
-            {/* Payments/Tests Tab */}
-            <TabsContent value="payments" className="space-y-4">
-              {pendingPayments.length === 0 ? (
-                <div className="text-center py-10 text-muted-foreground">
-                  لا توجد طلبات دفع معلقة حالياً.
-                </div>
-              ) : (
-                <div className="grid gap-4">
-                  {pendingPayments.map((payment: any) => (
-                    <Card key={payment.id}>
-                      <CardContent className="pt-6 flex items-center justify-between">
-                        <div>
-                          <h3 className="font-bold text-lg text-primary mb-2">طلب تفعيل محادثة 🔓</h3>
-                          <div className="text-base font-medium space-y-1 mt-1 bg-secondary/30 p-3 rounded-lg border border-border">
-                            <p className="flex items-center gap-2">
-                              <span className="text-muted-foreground">تفعيل الدردشة بين:</span>
-                              <span className="font-bold text-foreground">{payment.profiles?.full_name || "العميل"}</span>
-                              <span className="text-muted-foreground">و</span>
-                              <span className="font-bold text-foreground">{payment.checkers?.display_name || "المتحقق"}</span>
-                            </p>
-                            <p className="text-sm mt-2 text-muted-foreground">المبلغ: <span className="font-mono font-bold text-foreground">{payment.price || 0} USD</span></p>
-                            <p className="text-xs text-muted-foreground">التاريخ: {new Date(payment.created_at).toLocaleDateString("ar")}</p>
-                          </div>
-                          {payment.receipt_url && (
-                            <a href={payment.receipt_url} target="_blank" rel="noopener noreferrer" className="text-blue-500 text-sm hover:underline mt-2 inline-block">
-                              📎 عرض إيصال الدفع
-                            </a>
-                          )}
+          </TabsContent>
+
+          {/* Payments/Tests Tab */}
+          <TabsContent value="payments" className="space-y-4">
+            {pendingPayments.length === 0 ? (
+              <div className="text-center py-10 text-muted-foreground">
+                لا توجد طلبات دفع معلقة حالياً.
+              </div>
+            ) : (
+              <div className="grid gap-4">
+                {pendingPayments.map((payment: any) => (
+                  <Card key={payment.id}>
+                    <CardContent className="pt-6 flex items-center justify-between">
+                      <div>
+                        <h3 className="font-bold text-lg text-primary mb-2">طلب تفعيل محادثة 🔓</h3>
+                        <div className="text-base font-medium space-y-1 mt-1 bg-secondary/30 p-3 rounded-lg border border-border">
+                          <p className="flex items-center gap-2">
+                            <span className="text-muted-foreground">تفعيل الدردشة بين:</span>
+                            <span className="font-bold text-foreground">{payment.profiles?.full_name || "العميل"}</span>
+                            <span className="text-muted-foreground">و</span>
+                            <span className="font-bold text-foreground">{payment.checkers?.display_name || "المتحقق"}</span>
+                          </p>
+                          <p className="text-sm mt-2 text-muted-foreground">المبلغ: <span className="font-mono font-bold text-foreground">{payment.price || 0} USD</span></p>
+                          <p className="text-xs text-muted-foreground">التاريخ: {new Date(payment.created_at).toLocaleDateString("ar")}</p>
                         </div>
-                        <Button
-                          onClick={() => handleActivateChat(payment.id)}
-                          disabled={processing === payment.id}
-                          className="bg-green-600 hover:bg-green-700 text-white"
-                        >
-                          <Check className="w-4 h-4 mr-2" />
-                          تفعيل المحادثة
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              )}
-            </TabsContent>
+                        {payment.receipt_url && (
+                          <a href={payment.receipt_url} target="_blank" rel="noopener noreferrer" className="text-blue-500 text-sm hover:underline mt-2 inline-block">
+                            📎 عرض إيصال الدفع
+                          </a>
+                        )}
+                      </div>
+                      <Button
+                        onClick={() => handleActivateChat(payment.id)}
+                        disabled={processing === payment.id}
+                        className="bg-green-600 hover:bg-green-700 text-white"
+                      >
+                        <Check className="w-4 h-4 mr-2" />
+                        تفعيل المحادثة
+                      </Button>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
           </TabsContent>
 
           {/* Messages Tab */}
           <TabsContent value="messages" className="space-y-4">
             {supportMessages.length === 0 ? (
               <div className="text-center py-10 text-muted-foreground">
-                لا توجد رسائل دعم فني.
+                لا توجد مفاوضات دفع حالية.
               </div>
             ) : (
               <div className="grid gap-4">

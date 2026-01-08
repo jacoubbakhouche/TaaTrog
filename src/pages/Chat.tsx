@@ -39,6 +39,7 @@ const Chat = () => {
   const [conversationStatus, setConversationStatus] = useState<string | null>(null);
   const [conversationPrice, setConversationPrice] = useState<number>(0);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [isImChecker, setIsImChecker] = useState(false);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -77,16 +78,17 @@ const Chat = () => {
       setConversationStatus(conv.status); // Set Status for Locking Logic
       setConversationPrice(conv.price || 0);
 
-      const isImChecker = conv.checker_id && (
+      const imChecker = conv.checker_id && (
         // We can't easily check if I am the checker without fetching checkers table, 
         // but let's assume if user.id != conv.user_id, I am the checker
         user.id !== conv.user_id
       );
+      setIsImChecker(!!imChecker);
 
       let partnerNameFound = "مستخدم";
       let partnerAvatarFound = null;
 
-      if (isImChecker) {
+      if (imChecker) {
         // I am the Checker -> Fetch Client Profile
         const { data: clientProfile } = await supabase
           .from("profiles")
@@ -114,15 +116,22 @@ const Chat = () => {
 
       } else {
         // I am the Client -> Fetch Checker Profile
-        const { data: checkerProfile } = await supabase
-          .from("checkers")
-          .select("display_name, avatar_url")
-          .eq("id", conv.checker_id)
-          .maybeSingle();
 
-        if (checkerProfile) {
-          partnerNameFound = checkerProfile.display_name;
-          partnerAvatarFound = checkerProfile.avatar_url;
+        // Special Case: If this is a Payment Negotiation with Admin, show "Support"
+        if (conv.status === 'payment_negotiation') {
+          partnerNameFound = "الإدارة (الدعم الفني) 🛡️";
+          partnerAvatarFound = null; // Or use a static support image
+        } else {
+          const { data: checkerProfile } = await supabase
+            .from("checkers")
+            .select("display_name, avatar_url")
+            .eq("id", conv.checker_id)
+            .maybeSingle();
+
+          if (checkerProfile) {
+            partnerNameFound = checkerProfile.display_name;
+            partnerAvatarFound = checkerProfile.avatar_url;
+          }
         }
       }
 
@@ -243,13 +252,11 @@ const Chat = () => {
         <button onClick={() => navigate("/messages")} className="p-2 -ml-2">
           <ChevronLeft className="w-6 h-6" />
         </button>
-        <div className="w-10 h-10 rounded-full overflow-hidden bg-secondary flex-shrink-0">
+        <div className="w-10 h-10 rounded-full overflow-hidden bg-secondary flex-shrink-0 flex items-center justify-center border border-border">
           {partnerAvatar ? (
             <img src={partnerAvatar} alt="" className="w-full h-full object-cover" />
           ) : (
-            <div className="w-full h-full flex items-center justify-center">
-              <User className="w-6 h-6 text-muted-foreground" />
-            </div>
+            <User className="w-6 h-6 text-muted-foreground" />
           )}
         </div>
         <div className="flex-1 min-w-0">
@@ -313,25 +320,151 @@ const Chat = () => {
           </div>
         ) : (
           <div className="p-4 rounded-xl bg-secondary/50 border border-border text-center">
-            {conversationStatus === "pending_approval" ? (
-              <div className="space-y-2">
-                <p className="font-bold text-muted-foreground">بانتظار إتمام الدفع 🔒</p>
-                <p className="text-xs text-muted-foreground mb-3">يجب دفع المستحقات لبدء المحادثة مع هذا المتحقق.</p>
+            {isImChecker ? (
+              // Checker/Admin View of Locked Chat
+              <div className="space-y-4">
+                <p className="font-bold text-muted-foreground">هذه المحادثة بانتظار الدفع أو التفعيل 🔒</p>
+                <p className="text-xs text-muted-foreground mb-3">بصفتك المتحقق، يمكنك تفعيل المحادثة فوراً.</p>
                 <Button
-                  onClick={() => setIsPaymentModalOpen(true)}
-                  variant="outline"
-                  className="w-full text-xs"
+                  onClick={async () => {
+                    try {
+                      toast({ title: "جاري التفعيل...", description: "يتم تفعيل المحادثة الآن" });
+                      const { error } = await supabase
+                        .from('conversations')
+                        .update({ status: 'paid' } as any)
+                        .eq('id', conversationId);
+
+                      if (error) throw error;
+
+                      setConversationStatus('paid');
+                      toast({ title: "تم التفعيل بنجاح ✅", description: "يمكنك الآن بدء الدردشة" });
+                      window.location.reload();
+                    } catch (e) {
+                      console.error(e);
+                      toast({ title: "خطأ", description: "فشل التفعيل", variant: "destructive" });
+                    }
+                  }}
+                  className="w-full bg-green-600 hover:bg-green-700 text-white"
                 >
-                  إتمام الدفع
+                  ✅ تفعيل المحادثة فوراً
                 </Button>
               </div>
-            ) : conversationStatus === "payment_pending" ? (
-              <div className="space-y-1">
-                <p className="font-bold text-yellow-600">جاري مراجعة الدفع ⏳</p>
-                <p className="text-xs text-muted-foreground">سيتم تفعيل المحادثة تلقائياً بعد موافقة المشرف.</p>
-              </div>
             ) : (
-              <p className="text-sm text-muted-foreground">هذه المحادثة مغلقة ({conversationStatus})</p>
+              // Client View of Locked Chat
+              conversationStatus === "pending_approval" ? (
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <p className="font-bold text-muted-foreground">بانتظار إتمام الدفع 🔒</p>
+                    <p className="text-xs text-muted-foreground">اختر وسيلة الدفع للمتابعة</p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      onClick={() => setIsPaymentModalOpen(true)}
+                      variant="outline"
+                      className="w-full text-xs h-auto py-2 flex flex-col gap-1 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200"
+                    >
+                      <span className="font-bold">PayPal / بطاقة</span>
+                      <span className="text-[10px] text-muted-foreground">دفع إلكتروني آمن</span>
+                    </Button>
+
+                    <Button
+                      onClick={async () => {
+                        // Direct Manual Transfer Logic
+                        try {
+                          const { data: { user } } = await supabase.auth.getUser();
+                          if (!user) return;
+
+                          toast({ title: "جاري الاتصال...", description: "يتم تحويلك لمحادثة المشرف" });
+
+                          // 1. Find Admin ID
+                          const { data: adminUserId, error: rpcError } = await supabase.rpc('get_support_admin_id' as any);
+                          if (rpcError || !adminUserId) {
+                            toast({ title: "خطأ", description: "تعذر الاتصال بالمشرف", variant: "destructive" });
+                            return;
+                          }
+
+                          // 2. Find Admin Checker Profile
+                          const { data: adminChecker } = await supabase
+                            .from('checkers')
+                            .select('id')
+                            .eq('user_id', adminUserId as string)
+                            .maybeSingle();
+
+                          if (!adminChecker) {
+                            toast({ title: "خطأ", description: "حساب المشرف غير نشط", variant: "destructive" });
+                            return;
+                          }
+
+                          // 3. Mark Original Booking as 'payment_pending'
+                          await supabase
+                            .from('conversations')
+                            .update({ status: 'payment_pending' } as any)
+                            .eq('id', conversationId);
+
+                          // 4. Create/Get Negotiation Message
+                          const { data: existingConv } = await supabase
+                            .from('conversations')
+                            .select('id')
+                            .eq('user_id', user.id)
+                            .eq('checker_id', adminChecker.id)
+                            .maybeSingle();
+
+                          let targetConvId = existingConv?.id;
+
+                          if (targetConvId) {
+                            // Update existing conversation to ensure it's UNLOCKED
+                            await supabase
+                              .from('conversations')
+                              .update({ status: 'payment_negotiation' } as any)
+                              .eq('id', targetConvId);
+                          } else {
+                            const { data: newConv, error: createError } = await supabase
+                              .from('conversations')
+                              .insert({
+                                user_id: user.id,
+                                checker_id: adminChecker.id,
+                                status: 'payment_negotiation',
+                                price: 0
+                              } as any)
+                              .select()
+                              .single();
+
+                            if (createError) throw createError;
+                            targetConvId = newConv.id;
+
+                            // Initial Message
+                            await supabase.from('messages').insert({
+                              conversation_id: targetConvId,
+                              sender_id: user.id,
+                              content: "مرحباً، أود إتمام الدفع يدوياً لهذا الطلب. أرجو تزويدي بمعلومات الحساب."
+                            });
+                          }
+
+                          // 5. Refresh/Redirect
+                          window.location.href = `/chat/${targetConvId}`;
+
+                        } catch (e) {
+                          console.error(e);
+                          toast({ title: "خطأ", description: "حدث خطأ أثناء التحويل", variant: "destructive" });
+                        }
+                      }}
+                      variant="outline"
+                      className="w-full text-xs h-auto py-2 flex flex-col gap-1 hover:bg-green-50 hover:text-green-600 hover:border-green-200"
+                    >
+                      <span className="font-bold">تحويل يدوي</span>
+                      <span className="text-[10px] text-muted-foreground">CCP / BaridiMob</span>
+                    </Button>
+                  </div>
+                </div>
+              ) : conversationStatus === "payment_pending" ? (
+                <div className="space-y-1">
+                  <p className="font-bold text-yellow-600">جاري مراجعة الدفع ⏳</p>
+                  <p className="text-xs text-muted-foreground">سيتم تفعيل المحادثة تلقائياً بعد موافقة المشرف.</p>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground">هذه المحادثة مغلقة ({conversationStatus})</p>
+              )
             )}
           </div>
         )}
