@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { Menu, SlidersHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import CheckerCard from "@/components/CheckerCard";
 import BottomNav from "@/components/BottomNav";
@@ -149,11 +150,39 @@ const Index = () => {
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
+    <div className="min-h-screen bg-background pb-24">
+      {/* Header Skeleton */}
+      <header className="sticky top-0 bg-card/95 backdrop-blur-md z-30 border-b border-border">
+        <div className="flex items-center justify-between px-4 py-3">
+          <Skeleton className="w-12 h-12 rounded-full" />
+          <div className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-primary to-purple-600">رابط الثقة</div>
+          <Skeleton className="w-12 h-12 rounded-full" />
+        </div>
+      </header>
+
+      <main className="px-4 py-8">
+        <div className="flex items-center justify-between mb-6">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-8 w-20" />
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <div key={i} className="bg-card rounded-2xl border border-border overflow-hidden h-64 flex flex-col">
+              <Skeleton className="w-full h-32" />
+              <div className="p-3 space-y-2 flex-1">
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-3 w-1/2" />
+                <div className="mt-auto pt-2 flex justify-between">
+                  <Skeleton className="h-6 w-16 rounded-full" />
+                  <Skeleton className="h-6 w-6 rounded-full" />
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </main>
+    </div>
   }
 
   return (

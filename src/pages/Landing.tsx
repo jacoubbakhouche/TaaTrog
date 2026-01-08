@@ -88,7 +88,7 @@ const Landing = () => {
                     </div>
 
                     {/* Left Column: Visual Mockup (Couple Image) */}
-                    <div className="relative animate-fade-in-left hidden lg:block perspective-1000 group">
+                    <div className="relative animate-fade-in-left mt-12 lg:mt-0 perspective-1000 group">
                         {/* Decorative floating elements */}
                         <div className="absolute -top-20 -right-20 w-64 h-64 bg-gradient-to-br from-purple-500/20 to-transparent rounded-full blur-3xl" />
 
@@ -129,7 +129,7 @@ const Landing = () => {
                         {[...TIKTOK_VIDEOS, ...TIKTOK_VIDEOS].map((video, idx) => (
                             <div
                                 key={idx}
-                                className="inline-block w-[200px] md:w-[250px] aspect-[9/16] rounded-3xl overflow-hidden relative shadow-xl border-4 border-white/10 cursor-pointer hover:scale-105 transition-transform group"
+                                className="inline-block w-[200px] md:w-[250px] aspect-[9/16] rounded-3xl overflow-hidden relative shadow-xl border-4 border-white/10 cursor-pointer hover:scale-105 transition-transform group shrink-0"
                             >
                                 <img src={video} alt="Story" className="w-full h-full object-cover" />
                                 <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors flex items-center justify-center">

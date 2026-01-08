@@ -7,6 +7,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
@@ -303,8 +304,30 @@ const Admin = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen bg-background pb-10" dir="rtl">
+        {/* Header Skeleton */}
+        <div className="sticky top-0 bg-card border-b border-border p-4 flex items-center gap-4">
+          <Skeleton className="w-10 h-10 rounded-full" />
+          <div className="space-y-1">
+            <Skeleton className="h-5 w-32" />
+            <Skeleton className="h-3 w-20" />
+          </div>
+        </div>
+
+        <div className="p-4 space-y-6">
+          {/* Tabs Skeleton */}
+          <Skeleton className="h-10 w-full rounded-lg" />
+
+          {/* Stats Grid Skeleton */}
+          <div className="grid grid-cols-2 gap-4">
+            {[1, 2, 3, 4].map(i => (
+              <Skeleton key={i} className="h-32 rounded-xl" />
+            ))}
+          </div>
+
+          {/* Quick Actions Skeleton */}
+          <Skeleton className="h-48 w-full rounded-xl" />
+        </div>
       </div>
     );
   }

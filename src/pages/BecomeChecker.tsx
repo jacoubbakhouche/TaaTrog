@@ -10,6 +10,8 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Loader2 } from "lucide-react";
 
 const AVAILABLE_LANGUAGES = ["العربية", "English", "Français", "Español"];
 
@@ -176,8 +178,34 @@ const BecomeChecker = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen bg-background pb-8">
+        <header className="sticky top-0 bg-card/95 backdrop-blur-md z-30 border-b border-border px-4 py-3 mb-6">
+          <Skeleton className="h-8 w-48" />
+        </header>
+
+        <div className="p-4 space-y-8">
+          <Skeleton className="h-20 w-full rounded-2xl" />
+
+          <div className="space-y-4">
+            <Skeleton className="h-6 w-32 ml-auto" />
+            <Skeleton className="h-10 w-full" />
+            <div className="grid grid-cols-2 gap-4">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <Skeleton className="h-6 w-32 ml-auto" />
+            <div className="flex gap-2">
+              <Skeleton className="h-8 w-20 rounded-full" />
+              <Skeleton className="h-8 w-20 rounded-full" />
+              <Skeleton className="h-8 w-20 rounded-full" />
+            </div>
+          </div>
+
+          <Skeleton className="h-14 w-full rounded-2xl mt-8" />
+        </div>
       </div>
     );
   }

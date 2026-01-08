@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Loader2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 
 const AVAILABLE_LANGUAGES = [
@@ -242,8 +244,37 @@ const CheckerProfile = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen bg-background pb-20">
+        <header className="sticky top-0 bg-card/95 backdrop-blur-md z-30 border-b border-border px-4 py-3 mb-6 flex justify-between items-center">
+          <Skeleton className="w-10 h-10 rounded-full" />
+          <Skeleton className="h-6 w-32" />
+          <Skeleton className="h-9 w-16" />
+        </header>
+
+        <div className="p-4 space-y-8 flex flex-col items-center">
+          <Skeleton className="w-28 h-28 rounded-full" />
+
+          <div className="w-full space-y-4 mt-4">
+            <Skeleton className="h-4 w-24 ml-auto" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+
+          <div className="w-full grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-16 ml-auto" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-16 ml-auto" />
+              <Skeleton className="h-10 w-full" />
+            </div>
+          </div>
+
+          <div className="w-full space-y-2">
+            <Skeleton className="h-4 w-24 ml-auto" />
+            <Skeleton className="h-24 w-full" />
+          </div>
+        </div>
       </div>
     );
   }

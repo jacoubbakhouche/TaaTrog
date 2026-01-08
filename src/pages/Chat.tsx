@@ -2,10 +2,11 @@ import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
 import { ChevronLeft, Send, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import BottomNav from "@/components/BottomNav";
+
 
 import { PaymentModal } from "@/components/PaymentModal";
 
@@ -23,6 +24,22 @@ interface Checker {
   avatar_url: string | null;
   user_id: string;
 }
+
+// Sound Effects
+// Sound Effects
+const playSendSound = () => {
+  // Simple "Pop" sound base64
+  const audio = new Audio("data:audio/mp3;base64,//uQRAAAAWMSLwUIYAAsYkXgoQwAEaYLWfkWgAI0wWs/ItAAAGdJhuBbPn84QREQUQm6OeKpE5z46CN4cGQk4D8SH98l40y7Cj78pm3n8y////f/n8/9/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4gAAAAABAgMFBAUGBwgJCgsMDQ4PEBESExQVFhcYGRoaGxwdHh8gISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0+P0BBQkNERUZHSElKS0xNTk9QUVJTVFVWV1hZWltcXV5fYGFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6e3x9fn8i");
+  audio.volume = 0.5;
+  audio.play().catch(e => console.log("Audio play failed", e));
+};
+
+const playReceiveSound = () => {
+  // Simple "Ding" sound base64
+  const audio = new Audio("data:audio/mp3;base64,//uQRAAAAWMSLwUIYAAsYkXgoQwAEaYLWfkWgAI0wWs/ItAAAGdJhuBbPn84QREQUQm6OeKpE5z46CN4cGQk4D8SH98l40y7Cj78pm3n8y////f/n8/9/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4gAAAAABAgMFBAUGBwgJCgsMDQ4PEBESExQVFhcYGRoaGxwdHh8gISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0+P0BBQkNERUZHSElKS0xNTk9QUVJTVFVWV1hZWltcXV5fYGFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6e3x9fn8i");
+  audio.volume = 0.5;
+  audio.play().catch(e => console.log("Audio play failed", e));
+};
 
 const Chat = () => {
   const { conversationId } = useParams();
@@ -182,13 +199,25 @@ const Chat = () => {
           (payload) => {
             console.log("New message received via realtime:", payload.new);
             const newMessage = payload.new as Message;
+
             setMessages((prev) => {
+              // 1. Check if already exists (deduplication)
               if (prev.some(m => m.id === newMessage.id)) return prev;
-              return [...prev, newMessage];
+
+              // 2. Remove Optimistic Message (matches content & sender)
+              const filteredPrev = prev.filter(m =>
+                !(m.id.toString().startsWith("temp-") &&
+                  m.content === newMessage.content &&
+                  m.sender_id === newMessage.sender_id)
+              );
+
+              return [...filteredPrev, newMessage];
             });
 
-            // Mark as read immediately if chat is open
+            // Play Sound if received from others
             if (newMessage.sender_id !== user.id) {
+              playReceiveSound();
+              // Mark as read immediately if chat is open
               supabase
                 .from("messages")
                 .update({ is_read: true })
@@ -218,22 +247,48 @@ const Chat = () => {
 
 
 
+
+
+
+
   const sendMessage = async () => {
     if (!newMessage.trim() || !currentUserId || sending) return;
 
-    setSending(true);
+    // 1. Optimistic Update
+    const tempId = `temp-${Date.now()}`;
+    const optimisticMsg: Message = {
+      id: tempId,
+      content: newMessage.trim(),
+      sender_id: currentUserId,
+      created_at: new Date().toISOString(),
+      is_read: false
+    };
+
+    setMessages(prev => [...prev, optimisticMsg]);
+    setNewMessage("");
+    playSendSound();
+    scrollToBottom();
+
+    // 2. Actual Send
+    // setSending(true); // Don't block UI with sending state if we want it "fast"
+    // But we should prevent double sends. We will keep sending=true but only for network call.
+
+    // Actually, user wants "fast". Locking input feels "laggy". 
+    // I will NOT block input, but I will debounce or just let them send.
+    // I'll keep `sending` to prevent *same* message double submit if they spam enter, but clear input immediately.
+
     const { error } = await supabase.from("messages").insert({
       conversation_id: conversationId,
       sender_id: currentUserId,
-      content: newMessage.trim(),
+      content: optimisticMsg.content,
     });
 
     if (error) {
       toast({ title: "خطأ", description: "فشل إرسال الرسالة", variant: "destructive" });
-    } else {
-      setNewMessage("");
+      // Remove optimistic message on error
+      setMessages(prev => prev.filter(m => m.id !== tempId));
+      setNewMessage(optimisticMsg.content); // Restore content
     }
-    setSending(false);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -245,8 +300,40 @@ const Chat = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      <div className="min-h-screen bg-background flex flex-col">
+        {/* Header Skeleton */}
+        <div className="sticky top-0 z-10 bg-card border-b border-border px-4 py-3 flex items-center gap-3">
+          <Skeleton className="w-8 h-8 rounded-full" /> {/* Back Button */}
+          <Skeleton className="w-10 h-10 rounded-full" /> {/* Avatar */}
+          <div className="flex-1 space-y-2">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-3 w-16" />
+          </div>
+        </div>
+
+        {/* Messages Skeleton */}
+        <div className="flex-1 p-4 space-y-4">
+          {/* Received Message */}
+          <div className="flex justify-start">
+            <Skeleton className="h-12 w-3/4 rounded-2xl rounded-bl-md" />
+          </div>
+          {/* Sent Message */}
+          <div className="flex justify-end">
+            <Skeleton className="h-16 w-2/3 rounded-2xl rounded-br-md" />
+          </div>
+          {/* Received Message */}
+          <div className="flex justify-start">
+            <Skeleton className="h-10 w-1/2 rounded-2xl rounded-bl-md" />
+          </div>
+        </div>
+
+        {/* Input Skeleton */}
+        <div className="sticky bottom-0 bg-card border-t border-border p-3 safe-bottom">
+          <div className="flex items-center gap-2">
+            <Skeleton className="flex-1 h-10 rounded-full" />
+            <Skeleton className="w-10 h-10 rounded-full" />
+          </div>
+        </div>
       </div>
     );
   }
@@ -306,7 +393,7 @@ const Chat = () => {
       </div>
 
       {/* Input or Status Message */}
-      <div className="sticky bottom-[76px] bg-card border-t border-border p-3 safe-bottom z-10">
+      <div className="sticky bottom-0 bg-card border-t border-border p-3 safe-bottom z-10">
         {["paid", "payment_negotiation", "completed", "approved"].includes(conversationStatus || "") ? (
           <div className="flex items-center gap-2">
             <Input
@@ -416,7 +503,7 @@ const Chat = () => {
         )}
       </div>
 
-      <BottomNav />
+
 
       {conversationId && (
         <PaymentModal

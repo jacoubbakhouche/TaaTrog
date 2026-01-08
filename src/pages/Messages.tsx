@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { User, MessageCircle, Trash2 } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
 import BottomNav from "@/components/BottomNav";
 
 
@@ -69,9 +70,11 @@ const Messages = () => {
         .order("updated_at", { ascending: false });
 
       if (checkerId) {
-        query = query.or(`user_id.eq.${user.id},checker_id.eq.${checkerId}`);
+        // Complex OR: (Am User AND Not Deleted) OR (Am Checker AND Not Deleted)
+        query = query.or(`and(user_id.eq.${user.id},deleted_for_user.is.false),and(checker_id.eq.${checkerId},deleted_for_checker.is.false)`);
       } else {
-        query = query.eq("user_id", user.id);
+        // Simple User
+        query = query.eq("user_id", user.id).eq("deleted_for_user", false);
       }
 
       const { data: convs, error } = await query as any;
@@ -132,8 +135,25 @@ const Messages = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center pb-20">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      <div className="min-h-screen bg-background pb-20">
+        <header className="sticky top-0 bg-card/95 backdrop-blur-md z-10 border-b border-border px-4 py-4 mb-2">
+          <Skeleton className="h-7 w-24" />
+        </header>
+        <div className="space-y-2 px-4 mt-2">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="flex items-center gap-3 p-4 rounded-xl border border-border bg-card">
+              <Skeleton className="w-12 h-12 rounded-full" />
+              <div className="flex-1 space-y-2">
+                <div className="flex justify-between">
+                  <Skeleton className="h-4 w-32" />
+                  <Skeleton className="h-3 w-10" />
+                </div>
+                <Skeleton className="h-3 w-48" />
+              </div>
+            </div>
+          ))}
+        </div>
+        <BottomNav />
       </div>
     );
   }
@@ -217,20 +237,44 @@ const Messages = () => {
                     e.stopPropagation();
                     if (!window.confirm("هل أنت متأكد من حذف هذه المحادثة؟")) return;
 
-                    const { error } = await supabase
-                      .from("conversations")
-                      .delete()
-                      .eq("id", conv.id);
+                    const isImUser = conv.user_id === currentUserId;
+                    // If I am NOT the user, I must be the checker (since I see this chat)
+                    // But confirm checker_id matches just in case? Or just assume else.
+                    // conv.checkers.user_id is me?
+                    // Let's use the safe derivation:
+                    // We know `currentUserId`.
+                    // We know `conv.user_id` and `conv.checkers.user_id`.
 
-                    if (error) {
-                      console.error("Error deleting conversation:", error);
-                      // Make sure toast is imported or use alert if not available in this scope, 
-                      // but typically it is. If not, console error is fine for now as we adding logic.
-                      // Adjusting to use alert for safety if toast not imported in original snippet scope shown.
-                      // Re-checking imports: toast is NOT imported in Messages.tsx view. 
-                      // I will import toast or just use console/alert.
-                    } else {
+                    try {
+                      let shouldHardDelete = false;
+
+                      if (isImUser) {
+                        // I am the Client
+                        // If Checker already deleted, then Hard Delete
+                        if (conv.deleted_for_checker) shouldHardDelete = true;
+                      } else {
+                        // I am the Checker
+                        // If Client already deleted, then Hard Delete
+                        if (conv.deleted_for_user) shouldHardDelete = true;
+                      }
+
+                      if (shouldHardDelete) {
+                        const { error } = await supabase.from("conversations").delete().eq("id", conv.id);
+                        if (error) throw error;
+                      } else {
+                        // Soft Delete
+                        const updateData = isImUser
+                          ? { deleted_for_user: true, cleared_at_for_user: new Date().toISOString() }
+                          : { deleted_for_checker: true, cleared_at_for_checker: new Date().toISOString() };
+
+                        const { error } = await supabase.from("conversations").update(updateData).eq("id", conv.id);
+                        if (error) throw error;
+                      }
+
                       setConversations(conversations.filter((c) => c.id !== conv.id));
+                    } catch (err) {
+                      console.error("Error deleting conversation:", err);
+                      alert("فشلت عملية الحذف");
                     }
                   }}
                   className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"

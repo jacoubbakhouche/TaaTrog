@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Upload } from "lucide-react";
+import { Upload, Loader2 } from "lucide-react";
 
 interface PaymentModalProps {
     isOpen: boolean;
@@ -276,7 +276,7 @@ export const PaymentModal = ({ isOpen, onClose, bookingId, price, onPaymentSucce
                                 className="w-full h-14 text-lg bg-primary hover:bg-primary/90 rounded-full shadow-lg hover:shadow-primary/20 transition-all font-bold"
                             >
                                 {uploading ? (
-                                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                    <Loader2 className="w-5 h-5 animate-spin text-white" />
                                 ) : (
                                     "بدء المحادثة وإرسال الوصل"
                                 )}
