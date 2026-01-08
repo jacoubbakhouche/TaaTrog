@@ -11,30 +11,36 @@ import BecomeChecker from "./pages/BecomeChecker";
 import Admin from "./pages/Admin";
 import Messages from "./pages/Messages";
 import Chat from "./pages/Chat";
+import ClientProfile from "./pages/ClientProfile";
 import NotFound from "./pages/NotFound";
+
+import { ThemeProvider } from "@/components/theme-provider";
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Landing />} />
-          <Route path="/explore" element={<Index />} />
-          <Route path="/auth" element={<Auth />} />
-          <Route path="/checker-profile" element={<CheckerProfile />} />
-          <Route path="/become-checker" element={<BecomeChecker />} />
-          <Route path="/admin" element={<Admin />} />
-          <Route path="/messages" element={<Messages />} />
-          <Route path="/chat/:conversationId" element={<Chat />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
+    <ThemeProvider defaultTheme="dark" storageKey="vite-ui-theme">
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <Routes>
+            <Route path="/" element={<Landing />} />
+            <Route path="/explore" element={<Index />} />
+            <Route path="/auth" element={<Auth />} />
+            <Route path="/checker-profile" element={<CheckerProfile />} />
+            <Route path="/become-checker" element={<BecomeChecker />} />
+            <Route path="/profile" element={<ClientProfile />} />
+            <Route path="/admin" element={<Admin />} />
+            <Route path="/messages" element={<Messages />} />
+            <Route path="/chat/:conversationId" element={<Chat />} />
+            {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
+    </ThemeProvider>
   </QueryClientProvider>
 );
 

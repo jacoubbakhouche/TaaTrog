@@ -1,12 +1,32 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { X, Briefcase, User, UserSearch, ChevronDown, FileText, HelpCircle, Bell, LogOut, LogIn, Shield, Settings, UserPlus } from "lucide-react";
+import { X, Briefcase, User, UserSearch, ChevronDown, FileText, HelpCircle, Bell, LogOut, LogIn, Shield, Settings, UserPlus, Sun, Moon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { User as SupabaseUser } from "@supabase/supabase-js";
 import { useToast } from "@/hooks/use-toast";
+import { useTheme } from "./theme-provider";
 
 const ADMIN_EMAIL = "yakoubbakhouche011@gmail.com";
+
+const ThemeToggle = () => {
+  const { theme, setTheme } = useTheme();
+
+  return (
+    <button
+      onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+      className="w-full flex items-center gap-4 px-4 py-3 text-sidebar-foreground/80 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground rounded-xl transition-all duration-300 hover:scale-[1.02]"
+    >
+      <div className="relative">
+        <Sun className="h-5 w-5 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0 text-orange-500" />
+        <Moon className="absolute top-0 h-5 w-5 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100 text-blue-400" />
+      </div>
+      <span className="font-medium">
+        {theme === "dark" ? "الوضع الفاتح" : "الوضع الداكن"}
+      </span>
+    </button>
+  );
+};
 
 interface SidebarProps {
   isOpen: boolean;
@@ -62,7 +82,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
 
   const menuItems = [
     { icon: Briefcase, label: "Missions", action: () => { } },
-    { icon: User, label: "Account", action: () => { } },
+    { icon: User, label: "Account", action: () => navigate("/profile") },
     { icon: UserSearch, label: "Investigator", badge: "NEW", action: () => { } },
     { icon: ChevronDown, label: "Contact us", isExpandable: true, action: () => { } },
     { icon: FileText, label: "Blog", action: () => { } },
@@ -195,28 +215,32 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
           })}
         </nav>
 
-        {/* Auth Button */}
-        <div className="p-4 border-t border-sidebar-border">
-          {user ? (
-            <button
-              onClick={handleLogout}
-              className="w-full flex items-center gap-4 px-4 py-3.5 text-destructive hover:bg-destructive/10 rounded-xl transition-colors"
-            >
-              <LogOut className="w-5 h-5" />
-              <span className="font-medium">تسجيل الخروج</span>
-            </button>
-          ) : (
-            <button
-              onClick={() => {
-                navigate("/auth");
-                onClose();
-              }}
-              className="w-full flex items-center gap-4 px-4 py-3.5 bg-primary text-primary-foreground rounded-xl hover:bg-primary/90 transition-colors"
-            >
-              <LogIn className="w-5 h-5" />
-              <span className="font-medium">تسجيل الدخول</span>
-            </button>
-          )}
+        {/* Auth & Theme Floating Cloud */}
+        <div className="p-4 mt-auto z-50">
+          <div className="bg-sidebar-primary/10 backdrop-blur-md border border-sidebar-border/50 rounded-2xl p-2 shadow-lg space-y-1">
+            <ThemeToggle />
+
+            {user ? (
+              <button
+                onClick={handleLogout}
+                className="w-full flex items-center gap-4 px-4 py-3 text-destructive hover:bg-destructive/10 rounded-xl transition-all duration-300 hover:scale-[1.02]"
+              >
+                <LogOut className="w-5 h-5" />
+                <span className="font-medium">تسجيل الخروج</span>
+              </button>
+            ) : (
+              <button
+                onClick={() => {
+                  navigate("/auth");
+                  onClose();
+                }}
+                className="w-full flex items-center gap-4 px-4 py-3 text-sidebar-foreground hover:bg-sidebar-accent/50 rounded-xl transition-all duration-300 hover:scale-[1.02]"
+              >
+                <LogIn className="w-5 h-5" />
+                <span className="font-medium">تسجيل الدخول</span>
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </>

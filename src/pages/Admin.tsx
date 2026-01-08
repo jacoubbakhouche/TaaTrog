@@ -59,6 +59,7 @@ const Admin = () => {
   const [activeTab, setActiveTab] = useState("overview");
   const [supportMessages, setSupportMessages] = useState<any[]>([]);
   const [pendingPayments, setPendingPayments] = useState<any[]>([]);
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
   const handleActivateChat = async (requestId: string) => {
     setProcessing(requestId);
@@ -91,12 +92,12 @@ const Admin = () => {
       // 4. Notify User (Optional but good)
       await supabase.from("messages").insert({
         conversation_id: request.conversation_id,
-        sender_id: user?.id, // Admin ID
+        sender_id: currentUser?.id, // Admin ID
         content: `✅ تم تفعيل المحادثة بنجاح من قبل الإدارة! يمكنك الآن التواصل.`
       });
 
       toast.success("تم تفعيل المحادثة بنجاح ✅");
-      loadData();
+      loadData(currentUser?.id);
     } catch (e) {
       console.error(e);
       toast.error("فشل التفعيل");
@@ -118,18 +119,22 @@ const Admin = () => {
       return;
     }
 
-    loadData();
+    setCurrentUser(user);
+    loadData(user.id);
   };
 
-  const loadData = async () => {
+  const loadData = async (userId?: string) => {
     try {
-      console.log("Admin User ID:", user.id);
+      const targetUserId = userId || currentUser?.id;
+      if (!targetUserId) return;
+
+      console.log("Admin User ID:", targetUserId);
 
       // Find Admin Checker Profile
       const { data: adminChecker } = await supabase
         .from('checkers')
         .select('id')
-        .eq('user_id', user.id)
+        .eq('user_id', targetUserId)
         .maybeSingle();
 
       console.log("Admin Checker Profile:", adminChecker);
@@ -235,7 +240,7 @@ const Admin = () => {
       if (updateError) throw updateError;
 
       toast.success("تم قبول الطلب وتفعيل الحساب بنجاح");
-      loadData();
+      loadData(currentUser?.id);
     } catch (error) {
       console.error("Error approving:", error);
       toast.error("فشل في قبول الطلب");
@@ -255,7 +260,7 @@ const Admin = () => {
       if (error) throw error;
 
       toast.success("تم رفض الطلب");
-      loadData();
+      loadData(currentUser?.id);
     } catch (error) {
       console.error("Error rejecting:", error);
       toast.error("فشل في رفض الطلب");
@@ -275,7 +280,7 @@ const Admin = () => {
       if (error) throw error;
 
       toast.success(checker.is_active ? "تم إلغاء تفعيل الحساب" : "تم تفعيل الحساب");
-      loadData();
+      loadData(currentUser?.id);
     } catch (error) {
       console.error("Error toggling checker:", error);
       toast.error("فشل في تحديث الحالة");

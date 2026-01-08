@@ -478,45 +478,89 @@ const Chat = () => {
                     <p className="text-xs text-muted-foreground">اختر وسيلة الدفع للمتابعة</p>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button
-                      onClick={() => setIsPaymentModalOpen(true)}
-                      variant="outline"
-                      className="w-full text-xs h-auto py-2 flex flex-col gap-1 hover:bg-blue-50 hover:text-blue-600 hover:border-blue-200"
-                    >
-                      <span className="font-bold">PayPal / بطاقة</span>
-                      <span className="text-[10px] text-muted-foreground">دفع إلكتروني آمن</span>
-                    </Button>
-
+                  <div className="grid grid-cols-1 gap-2">
                     <Button
                       onClick={async () => {
-                        // New Logic: Switch to Payment Negotiation (Admin joins chat)
                         try {
-                          toast({ title: "جاري الطلب...", description: "يتم استدعاء المشرف للمحادثة..." });
+                          toast({ title: "جاري فتح قناة دفع...", description: "يتم تحويلك إلى المشرف..." });
 
-                          const { error } = await supabase
+                          // 1. Get Admin ID
+                          const { data: adminUserId, error: rpcError } = await supabase.rpc('get_support_admin_id');
+
+                          if (rpcError || !adminUserId) {
+                            console.error("RPC Error:", rpcError);
+                            toast({ title: "خطأ", description: "تعذر الاتصال بالمشرف", variant: "destructive" });
+                            return;
+                          }
+
+                          // 2. Get Admin Checker Profile
+                          const { data: adminChecker, error: checkerError } = await supabase
+                            .from('checkers')
+                            .select('id')
+                            .eq('user_id', adminUserId)
+                            .maybeSingle();
+
+                          if (checkerError || !adminChecker) {
+                            toast({ title: "خطأ", description: "حساب المشرف غير مهيأ", variant: "destructive" });
+                            return;
+                          }
+
+                          // 3. Create or Get Support Conversation
+                          // Check if one already exists for payment negotiation? Or just general support?
+                          // Let's create a *new* one or reuse support thread.
+                          // Ideally, we want a thread specific to this issue, but single support thread is cleaner.
+                          // Let's use single support thread (User <-> Admin).
+
+                          const { data: existingConv } = await supabase
                             .from('conversations')
-                            .update({ status: 'payment_negotiation' } as any)
-                            .eq('id', conversationId);
+                            .select('id')
+                            .eq('user_id', currentUserId)
+                            .eq('checker_id', adminChecker.id)
+                            .maybeSingle(); // payment_negotiation or payment_pending status? No, just any conv.
 
-                          if (error) throw error;
+                          let targetConvId = existingConv?.id;
 
-                          setConversationStatus('payment_negotiation');
-                          toast({ title: "تم الطلب بنجاح ✅", description: "المشرف سينضم للمحادثة قريباً لإتمام الدفع." });
+                          if (!targetConvId) {
+                            const { data: newConv, error: createError } = await supabase
+                              .from('conversations')
+                              .insert({
+                                user_id: currentUserId,
+                                checker_id: adminChecker.id,
+                                status: 'payment_negotiation',
+                                price: 0
+                              } as any)
+                              .select()
+                              .single();
 
-                          // Reload to unlock chat input
-                          window.location.reload();
+                            if (createError) throw createError;
+                            targetConvId = newConv.id;
+                          }
+
+                          // 4. Send Context Message
+                          await supabase.from('messages').insert({
+                            conversation_id: targetConvId,
+                            sender_id: currentUserId,
+                            content: `السلام عليكم، أريد تفعيل المحادثة رقم #${conversationId} (مع ${partnerName}) عن طريق الدفع اليدوي (CCP/BaridiMob).`
+                          });
+
+                          // 5. Update Original Chat Status to indicate "User Requested Payment"?
+                          // Maybe not strictly needed if we just rely on Support chat, but good for UI feedback.
+                          // User said: "Original chat stays closed".
+                          // So we don't change original chat status yet. Admin will change it to 'paid'.
+
+                          navigate(`/chat/${targetConvId}`);
 
                         } catch (e) {
                           console.error(e);
-                          toast({ title: "خطأ", description: "حدث خطأ أثناء الطلب", variant: "destructive" });
+                          toast({ title: "خطأ", description: "حدث خطأ غير متوقع", variant: "destructive" });
                         }
                       }}
-                      variant="outline"
-                      className="w-full text-xs h-auto py-2 flex flex-col gap-1 hover:bg-green-50 hover:text-green-600 hover:border-green-200"
+                      className="w-full bg-primary hover:bg-primary/90 text-primary-foreground h-auto py-3 rounded-xl shadow-lg hover:shadow-primary/20 transition-all"
                     >
-                      <span className="font-bold">موافقة / طلب دفع 🤝</span>
-                      <span className="text-[10px] text-muted-foreground">تحدث مع المشرف للدفع</span>
+                      <div className="flex items-center justify-center gap-2">
+                        <span className="font-bold text-lg">الدفع اليدوي (CCP / BaridiMob)</span>
+                      </div>
+                      <p className="text-xs opacity-90 mt-1 font-normal">تحدث مباشرة مع الإدارة لتفعيل الخدمة</p>
                     </Button>
                   </div>
                 </div>
