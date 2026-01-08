@@ -133,27 +133,13 @@ const Admin = () => {
 
       console.log("Admin Checker Profile:", adminChecker);
 
-      // Load all data in parallel
-      const [requestsRes, checkersRes, testsRes, pendingRes, supportRes] = await Promise.all([
+      // Load all data with allSettled to prevent one failure from blocking everything
+      const results = await Promise.allSettled([
         supabase.from("checker_requests").select("*").order("created_at", { ascending: false }),
         supabase.from("checkers").select("*").order("created_at", { ascending: false }),
         supabase.from("loyalty_tests").select("id", { count: "exact" }),
-        // Fetch pending payments from NEW activation_requests table
-        supabase
-          .from("activation_requests")
-          .select(`
-            id,
-            created_at,
-            status,
-            user_id,
-            conversation_id,
-            profiles:user_id (full_name, avatar_url),
-            checkers:checker_id (display_name)
-          `)
-          .eq("status", "pending")
-          .order("created_at", { ascending: false }),
-
-        // Fetch support messages (ALL payment negotiations)
+        supabase.from("loyalty_tests").select("id", { count: "exact" }),
+        // Support Messages (Payment Negotiations) - This is the PRIMARY way now
         supabase
           .from("conversations")
           .select(`
@@ -164,32 +150,45 @@ const Admin = () => {
           .order("created_at", { ascending: false })
       ]);
 
-      console.log("Pending Requests Response:", pendingRes);
-      console.log("Support Messages Response:", supportRes);
+      const [requestsRes, checkersRes, testsRes, supportRes] = results;
 
-      if (requestsRes.error) throw requestsRes.error;
-      if (checkersRes.error) throw checkersRes.error;
-      if (pendingRes.error) console.error("Error fetching pending requests:", pendingRes.error);
-      if (supportRes.error) console.error("Error fetching support messages:", supportRes.error);
+      // Helper to process results
+      const processResult = (res: PromiseSettledResult<any>, name: string) => {
+        if (res.status === 'rejected') {
+          console.error(`Error fetching ${name}:`, res.reason);
+          return { data: [], error: res.reason };
+        }
+        if (res.value.error) {
+          console.error(`Error fetching ${name} (Supabase):`, res.value.error);
+          return { data: [], error: res.value.error };
+        }
+        return { data: res.value.data, error: null, count: res.value.count };
+      };
 
-      const requestsData = (requestsRes.data as CheckerRequest[]) || [];
-      const checkersData = (checkersRes.data as Checker[]) || [];
-      const pendingData = (pendingRes.data as any[]) || [];
-      const supportData = (supportRes.data as any[]) || [];
+      const requestsData = processResult(requestsRes, "checker_requests");
+      const checkersData = processResult(checkersRes, "checkers");
+      const testsData = processResult(testsRes, "loyalty_tests");
+      const supportData = processResult(supportRes, "conversations (support)");
 
-      setRequests(requestsData);
-      setCheckers(checkersData);
-      setPendingPayments(pendingData);
-      setSupportMessages(supportData);
+      setRequests((requestsData.data as CheckerRequest[]) || []);
+      setCheckers((checkersData.data as Checker[]) || []);
+      setSupportMessages((supportData.data as any[]) || []);
+
       setStats({
-        totalCheckers: checkersData.length,
-        activeCheckers: checkersData.filter(c => c.is_active).length,
-        pendingRequests: requestsData.filter(r => r.status === "pending").length,
-        totalTests: testsRes.count || 0,
+        totalCheckers: checkersData.data?.length || 0,
+        activeCheckers: (checkersData.data as Checker[])?.filter(c => c.is_active).length || 0,
+        pendingRequests: (requestsData.data as CheckerRequest[])?.filter(r => r.status === "pending").length || 0,
+        totalTests: testsData.count || 0,
       });
+
+      // Show specific error toast only if something critical failed, or a generic warning
+      if (supportData.error) {
+        toast.warning("بعض البيانات لم يتم تحميلها بشكل صحيح. تحقق من وحدة التحكم (Console).");
+      }
+
     } catch (error) {
-      console.error("Error loading data:", error);
-      toast.error("فشل في تحميل البيانات");
+      console.error("Critical Error loading data:", error);
+      toast.error("فشل حاد في تحميل البيانات");
     } finally {
       setLoading(false);
     }
@@ -347,10 +346,6 @@ const Admin = () => {
             <TabsTrigger value="checkers" className="flex items-center gap-1">
               <Users className="w-4 h-4" />
               <span className="hidden sm:inline">المتحققون</span>
-            </TabsTrigger>
-            <TabsTrigger value="payments" className="flex items-center gap-1">
-              <Shield className="w-4 h-4" />
-              <span className="hidden sm:inline">تفعيل المحادثات</span>
             </TabsTrigger>
             <TabsTrigger value="messages" className="flex items-center gap-1">
               <MessageSquare className="w-4 h-4" />
@@ -628,50 +623,6 @@ const Admin = () => {
                   </CardContent>
                 </Card>
               ))
-            )}
-          </TabsContent>
-
-          {/* Payments/Tests Tab */}
-          <TabsContent value="payments" className="space-y-4">
-            {pendingPayments.length === 0 ? (
-              <div className="text-center py-10 text-muted-foreground">
-                لا توجد طلبات دفع معلقة حالياً.
-              </div>
-            ) : (
-              <div className="grid gap-4">
-                {pendingPayments.map((payment: any) => (
-                  <Card key={payment.id}>
-                    <CardContent className="pt-6 flex items-center justify-between">
-                      <div>
-                        <h3 className="font-bold text-lg text-primary mb-2">طلب تفعيل محادثة 🔓</h3>
-                        <div className="text-base font-medium space-y-1 mt-1 bg-secondary/30 p-3 rounded-lg border border-border">
-                          <p className="flex items-center gap-2">
-                            <span className="text-muted-foreground">تفعيل الدردشة بين:</span>
-                            <span className="font-bold text-foreground">{payment.profiles?.full_name || "العميل"}</span>
-                            <span className="text-muted-foreground">و</span>
-                            <span className="font-bold text-foreground">{payment.checkers?.display_name || "المتحقق"}</span>
-                          </p>
-                          <p className="text-sm mt-2 text-muted-foreground">المبلغ: <span className="font-mono font-bold text-foreground">{payment.price || 0} USD</span></p>
-                          <p className="text-xs text-muted-foreground">التاريخ: {new Date(payment.created_at).toLocaleDateString("ar")}</p>
-                        </div>
-                        {payment.receipt_url && (
-                          <a href={payment.receipt_url} target="_blank" rel="noopener noreferrer" className="text-blue-500 text-sm hover:underline mt-2 inline-block">
-                            📎 عرض إيصال الدفع
-                          </a>
-                        )}
-                      </div>
-                      <Button
-                        onClick={() => handleActivateChat(payment.id)}
-                        disabled={processing === payment.id}
-                        className="bg-green-600 hover:bg-green-700 text-white"
-                      >
-                        <Check className="w-4 h-4 mr-2" />
-                        تفعيل المحادثة
-                      </Button>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
             )}
           </TabsContent>
 

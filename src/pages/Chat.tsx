@@ -378,76 +378,35 @@ const Chat = () => {
 
                     <Button
                       onClick={async () => {
-                        // Direct Manual Transfer Logic
+                        // New Logic: Switch to Payment Negotiation (Admin joins chat)
                         try {
-                          const { data: { user } } = await supabase.auth.getUser();
-                          if (!user) return;
+                          toast({ title: "جاري الطلب...", description: "يتم استدعاء المشرف للمحادثة..." });
 
-                          toast({ title: "جاري الإرسال...", description: "يتم إرسال طلب التفعيل للمشرف" });
-
-                          // 1. Find Admin/Support ID (To link the request if needed, or just insert)
-                          // We need the checker_id of the current conversation to know who we are paying for?
-                          // The `activation_requests` table has `checker_id`. Ideally this is the TARGET checker we want to unlock chat with.
-                          // So we use the conversation's checker_id.
-
-                          // We need to know who the checker is in this conversation.
-                          // We entered Chat page, we fetched `conv`.
-
-                          // Re-fetch conversation to be safe or use state if available.
-                          // We have `conversationId`.
-
-                          const { data: currentConv } = await supabase
+                          const { error } = await supabase
                             .from('conversations')
-                            .select('checker_id, status')
-                            .eq('id', conversationId)
-                            .single();
-
-                          if (!currentConv || !currentConv.checker_id) {
-                            toast({ title: "خطأ", description: "بيانات المحادثة غير مكتملة", variant: "destructive" });
-                            return;
-                          }
-
-                          // 2. Insert into activation_requests
-                          const { error: insertError } = await supabase
-                            .from('activation_requests')
-                            .insert({
-                              user_id: user.id,
-                              conversation_id: conversationId,
-                              checker_id: currentConv.checker_id,
-                              status: 'pending'
-                            } as any);
-
-                          if (insertError) throw insertError;
-
-                          // 3. Mark Original Booking as 'payment_pending' (Visual Feedback)
-                          await supabase
-                            .from('conversations')
-                            .update({ status: 'payment_pending' } as any)
+                            .update({ status: 'payment_negotiation' } as any)
                             .eq('id', conversationId);
 
-                          setConversationStatus('payment_pending');
-                          toast({ title: "تم الإرسال ✅", description: "طلبك قيد المراجعة من قبل المشرف." });
+                          if (error) throw error;
 
-                          // Optional: Notify Admin via Message? 
-                          // No, the Admin Dashboard will read from the new table.
+                          setConversationStatus('payment_negotiation');
+                          toast({ title: "تم الطلب بنجاح ✅", description: "المشرف سينضم للمحادثة قريباً لإتمام الدفع." });
+
+                          // Reload to unlock chat input
+                          window.location.reload();
 
                         } catch (e) {
                           console.error(e);
-                          toast({ title: "خطأ", description: "حدث خطأ أثناء الإرسال", variant: "destructive" });
+                          toast({ title: "خطأ", description: "حدث خطأ أثناء الطلب", variant: "destructive" });
                         }
                       }}
                       variant="outline"
                       className="w-full text-xs h-auto py-2 flex flex-col gap-1 hover:bg-green-50 hover:text-green-600 hover:border-green-200"
                     >
-                      <span className="font-bold">تحويل يدوي</span>
-                      <span className="text-[10px] text-muted-foreground">CCP / BaridiMob</span>
+                      <span className="font-bold">موافقة / طلب دفع 🤝</span>
+                      <span className="text-[10px] text-muted-foreground">تحدث مع المشرف للدفع</span>
                     </Button>
                   </div>
-                </div>
-              ) : conversationStatus === "payment_pending" ? (
-                <div className="space-y-1">
-                  <p className="font-bold text-yellow-600">جاري مراجعة الدفع ⏳</p>
-                  <p className="text-xs text-muted-foreground">سيتم تفعيل المحادثة تلقائياً بعد موافقة المشرف.</p>
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">هذه المحادثة مغلقة ({conversationStatus})</p>

@@ -75,7 +75,7 @@ export const HeroSection = () => {
                     </div>
 
                     {/* Left Column: Visual Mockup */}
-                    <div className="relative animate-fade-in-left hidden lg:block">
+                    <div className="relative animate-fade-in-left mt-12 lg:mt-0">
                         {/* Floating Glass Cards */}
                         <div className="absolute -top-10 -right-10 w-32 h-32 bg-white/10 backdrop-blur-md rounded-2xl border border-white/20 animate-float z-20 hidden xl:block" />
                         <div className="absolute -bottom-10 -left-10 w-40 h-40 bg-primary/10 backdrop-blur-md rounded-full border border-primary/20 animate-float-slow z-0 hidden xl:block" />
