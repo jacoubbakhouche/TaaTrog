@@ -56,7 +56,7 @@ const Admin = () => {
   const [stats, setStats] = useState<Stats>({ totalCheckers: 0, activeCheckers: 0, pendingRequests: 0, totalTests: 0 });
   const [processing, setProcessing] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
-  const [pendingPayments, setPendingPayments] = useState<any[]>([]);
+  const [supportMessages, setSupportMessages] = useState<any[]>([]);
 
   const handleActivateChat = async (paymentId: string) => {
     setProcessing(paymentId);
@@ -96,8 +96,19 @@ const Admin = () => {
 
   const loadData = async () => {
     try {
+      // Get Admin User ID first
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Find Admin Checker Profile
+      const { data: adminChecker } = await supabase
+        .from('checkers')
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
       // Load all data in parallel
-      const [requestsRes, checkersRes, testsRes, paymentsRes] = await Promise.all([
+      const [requestsRes, checkersRes, testsRes, paymentsRes, supportRes] = await Promise.all([
         supabase.from("checker_requests").select("*").order("created_at", { ascending: false }),
         supabase.from("checkers").select("*").order("created_at", { ascending: false }),
         supabase.from("loyalty_tests").select("id", { count: "exact" }),
@@ -109,7 +120,18 @@ const Admin = () => {
             profiles!conversations_user_id_fkey (full_name)
           `)
           .eq("status", "payment_pending")
+          .order("created_at", { ascending: false }),
+        // Fetch support messages (where admin is the checker and status is 'payment_negotiation')
+        adminChecker ? supabase
+          .from("conversations")
+          .select(`
+            id, user_id, status, created_at,
+            profiles!conversations_user_id_fkey (full_name, avatar_url)
+          `)
+          .eq("checker_id", adminChecker.id)
+          .eq("status", "payment_negotiation")
           .order("created_at", { ascending: false })
+          : Promise.resolve({ data: [], error: null })
       ]);
 
       if (requestsRes.error) throw requestsRes.error;
@@ -118,10 +140,12 @@ const Admin = () => {
       const requestsData = (requestsRes.data as CheckerRequest[]) || [];
       const checkersData = (checkersRes.data as Checker[]) || [];
       const paymentsData = (paymentsRes.data as any[]) || [];
+      const supportData = (supportRes.data as any[]) || [];
 
       setRequests(requestsData);
       setCheckers(checkersData);
       setPendingPayments(paymentsData);
+      setSupportMessages(supportData);
       setStats({
         totalCheckers: checkersData.length,
         activeCheckers: checkersData.filter(c => c.is_active).length,
@@ -271,7 +295,7 @@ const Admin = () => {
 
       <div className="p-4">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="w-full grid grid-cols-3 mb-4">
+          <TabsList className="w-full grid grid-cols-4 mb-4">
             <TabsTrigger value="overview" className="flex items-center gap-1">
               <BarChart3 className="w-4 h-4" />
               <span className="hidden sm:inline">نظرة عامة</span>
@@ -292,6 +316,15 @@ const Admin = () => {
             <TabsTrigger value="payments" className="flex items-center gap-1">
               <Shield className="w-4 h-4" />
               <span className="hidden sm:inline">الدفعات</span>
+            </TabsTrigger>
+            <TabsTrigger value="messages" className="flex items-center gap-1">
+              <MessageSquare className="w-4 h-4" />
+              <span className="hidden sm:inline">الرسائل</span>
+              {supportMessages.length > 0 && (
+                <Badge className="ml-1 h-5 w-5 p-0 flex items-center justify-center bg-blue-500">
+                  {supportMessages.length}
+                </Badge>
+              )}
             </TabsTrigger>
           </TabsList>
 
@@ -378,6 +411,14 @@ const Admin = () => {
                 >
                   <Users className="w-4 h-4 mr-2" />
                   إدارة المتحققين
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full justify-start mt-2"
+                  onClick={() => setActiveTab("messages")}
+                >
+                  <MessageSquare className="w-4 h-4 mr-2 text-blue-500" />
+                  رسائل الدعم الفني ({supportMessages.length})
                 </Button>
               </CardContent>
             </Card>
@@ -593,10 +634,39 @@ const Admin = () => {
               )}
             </TabsContent>
           </TabsContent>
+
+          {/* Messages Tab */}
+          <TabsContent value="messages" className="space-y-4">
+            {supportMessages.length === 0 ? (
+              <div className="text-center py-10 text-muted-foreground">
+                لا توجد رسائل دعم فني.
+              </div>
+            ) : (
+              <div className="grid gap-4">
+                {supportMessages.map((msg: any) => (
+                  <Card key={msg.id} className="cursor-pointer hover:bg-accent/5 transition-colors" onClick={() => navigate(`/chat/${msg.id}`)}>
+                    <CardContent className="p-4 flex items-center gap-4">
+                      <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
+                        <MessageSquare className="w-6 h-6 text-blue-600" />
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="font-bold text-lg flex items-center justify-between">
+                          <span>{msg.profiles?.full_name || "عميل"}</span>
+                          <span className="text-xs font-normal text-muted-foreground">{new Date(msg.created_at).toLocaleString('ar')}</span>
+                        </h3>
+                        <p className="text-sm text-muted-foreground">اضغط لفتح المحادثة والمتابعة.</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </TabsContent>
         </Tabs>
       </div>
     </div>
   );
 };
+
 
 export default Admin;

@@ -175,124 +175,117 @@ export const PaymentModal = ({ isOpen, onClose, bookingId, price, onPaymentSucce
                     </TabsContent>
 
                     <TabsContent value="manual" className="space-y-4 py-4">
-                        <div className="bg-muted p-4 rounded-lg space-y-2 text-sm text-right">
-                            <p className="text-muted-foreground mb-4">
-                                عند اختيار الدفع اليدوي، سيتم فتح محادثة تلقائية مع المشرف (Admin) لتزويدك بتفاصيل الحساب وإتمام العملية.
-                            </p>
+                        <div className="bg-muted p-6 rounded-xl space-y-4 text-center">
+                            <div className="w-16 h-16 rounded-full bg-primary/10 mx-auto flex items-center justify-center">
+                                <Upload className="w-8 h-8 text-primary" />
+                            </div>
+
+                            <div className="space-y-2">
+                                <h3 className="font-bold text-lg">إرسال وصل الدفع (BaridiMob / CCP)</h3>
+                                <p className="text-sm text-muted-foreground leading-relaxed max-w-[90%] mx-auto">
+                                    سيتم فتح محادثة مع المشرف لإرسال صورة الوصل وتفعيل الخدمة.
+                                </p>
+                            </div>
+
                             <Button
                                 onClick={async () => {
+                                    setUploading(true);
                                     try {
-                                        setUploading(true);
-
-                                        // 1. Find Admin User via user_roles (more reliable)
-                                        const { data: adminRole, error: roleError } = await supabase
-                                            .from('user_roles')
-                                            .select('user_id')
-                                            .eq('role', 'admin')
-                                            .maybeSingle();
-
-                                        let adminUserId = adminRole?.user_id;
-
-                                        // Fallback: Check profiles if user_roles empty
-                                        if (!adminUserId) {
-                                            const { data: adminProfile } = await supabase
-                                                .from('profiles')
-                                                .select('user_id')
-                                                .eq('role', 'admin')
-                                                .maybeSingle();
-                                            adminUserId = adminProfile?.user_id;
+                                        const { data: { user } } = await supabase.auth.getUser();
+                                        if (!user) {
+                                            toast.error("يرجى تسجيل الدخول أولاً");
+                                            return;
                                         }
 
-                                        if (!adminUserId) {
-                                            console.error("No admin found");
-                                            toast.error("لم يتم العثور على مشرف متاح حالياً.");
+                                        // Find Admin User ID using Secure RPC
+                                        // This avoids exposing email columns or complex RLS on user_roles
+                                        const { data: adminUserId, error: rpcError } = await supabase.rpc('get_support_admin_id' as any);
+
+                                        if (rpcError || !adminUserId) {
+                                            console.error("Could not find admin user ID via RPC", rpcError);
+                                            toast.error("تعذر تحديد حساب المشرف. يرجى التأكد من وجود مشرف في النظام.");
                                             setUploading(false);
                                             return;
                                         }
 
-                                        // 2. Get current user
-                                        const { data: { user } } = await supabase.auth.getUser();
-                                        if (!user) return;
-
-                                        // 3. Update original booking status to 'payment_pending' so it appears in Admin Dashboard
-                                        if (bookingId) {
-                                            const { error: updateError } = await supabase
-                                                .from('conversations')
-                                                .update({ status: 'payment_pending' } as any)
-                                                .eq('id', bookingId);
-
-                                            if (updateError) {
-                                                console.error("Error updating booking status:", updateError);
-                                                // Continue anyway to open chat
-                                            }
-                                        }
-
-                                        // 4. Find Admin's Checker Profile
-                                        // We need the admin to have a 'checker' profile to attach the chat to.
-                                        const { data: adminChecker } = await supabase
+                                        // Find Admin's Checker Profile
+                                        const { data: adminChecker, error: checkerError } = await supabase
                                             .from('checkers')
                                             .select('id')
-                                            .eq('user_id', adminUserId)
+                                            .eq('user_id', adminUserId as string)
                                             .maybeSingle();
 
-                                        let targetCheckerId = adminChecker?.id;
-
-                                        if (!targetCheckerId) {
-                                            // If Admin has no checker profile, we can't standardly create a chat in this schema.
-                                            // We'll alert the user.
-                                            toast.error("حساب المشرف غير مفعل لاستلام المحادثات. يرجى الانتظار.");
-                                            // Ideally, we'd create a checker profile for the admin here or use a 'support' system.
-                                            setUploading(false);
+                                        if (!adminChecker) {
+                                            toast.error("حساب المشرف غير مهيأ لاستلام الرسائل.");
                                             return;
                                         }
 
+                                        // Update Original Booking
+                                        await supabase
+                                            .from('conversations')
+                                            .update({ status: 'payment_pending' } as any)
+                                            .eq('id', bookingId);
+
+                                        // Create/Get Support Conversation
                                         const { data: existingConv } = await supabase
                                             .from('conversations')
                                             .select('id')
                                             .eq('user_id', user.id)
-                                            .eq('checker_id', targetCheckerId)
+                                            .eq('checker_id', adminChecker.id)
                                             .maybeSingle();
 
-                                        let conversationId = existingConv?.id;
+                                        let targetConvId = existingConv?.id;
 
-                                        if (!conversationId) {
+                                        if (!targetConvId) {
                                             const { data: newConv, error: createError } = await supabase
                                                 .from('conversations')
                                                 .insert({
                                                     user_id: user.id,
-                                                    client_id: user.id, // Ensure this column exists via migration
-                                                    checker_id: targetCheckerId,
-                                                    status: 'payment_pending',
+                                                    checker_id: adminChecker.id,
+                                                    status: 'payment_negotiation', // Special status
                                                     price: 0
-                                                })
+                                                } as any)
                                                 .select()
                                                 .single();
 
                                             if (createError) throw createError;
-                                            conversationId = newConv.id;
+                                            targetConvId = newConv.id;
+
+                                            // Send Initial Message AS USER (Avoids RLS "spoofing" error)
+                                            // Since user creates the conversation, they should start it.
+                                            await supabase.from('messages').insert({
+                                                conversation_id: targetConvId,
+                                                sender_id: user.id, // User sends message
+                                                content: "السلام عليكم، أرغب في إتمام الدفع عن طريق BaridiMob / CCP. أرجو تزويدي بالمعلومات."
+                                            });
                                         }
 
-                                        // 4. Navigate
-                                        toast.success("جاري فتح المحادثة مع المشرف...");
-                                        onClose();
+                                        toast.success("جاري نقلك إلى المحادثة...");
                                         onPaymentSuccess();
-                                        navigate(`/chat/${conversationId}`);
+                                        navigate(`/chat/${targetConvId}`);
+                                        onClose();
+
                                     } catch (e) {
-                                        console.error("Chat error:", e);
-                                        toast.error("فشل في بدء المحادثة");
+                                        console.error("Error starting admin chat:", e);
+                                        toast.error("حدث خطأ غير متوقع.");
                                     } finally {
                                         setUploading(false);
                                     }
                                 }}
-                                className="w-full bg-primary hover:bg-primary/90 text-white font-bold py-6 rounded-xl"
                                 disabled={uploading}
+                                className="w-full h-14 text-lg bg-primary hover:bg-primary/90 rounded-full shadow-lg hover:shadow-primary/20 transition-all font-bold"
                             >
-                                {uploading ? "جاري الاتصال..." : "تواصل مع المشرف لإتمام الدفع"}
+                                {uploading ? (
+                                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                ) : (
+                                    "بدء المحادثة وإرسال الوصل"
+                                )}
                             </Button>
                         </div>
                     </TabsContent>
                 </Tabs>
             </DialogContent>
-        </Dialog>
+        </Dialog >
     );
 };
+
