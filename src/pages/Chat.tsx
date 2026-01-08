@@ -26,20 +26,34 @@ interface Checker {
 }
 
 // Sound Effects
-// Sound Effects
-const playSendSound = () => {
-  // Simple "Pop" sound base64
-  const audio = new Audio("data:audio/mp3;base64,//uQRAAAAWMSLwUIYAAsYkXgoQwAEaYLWfkWgAI0wWs/ItAAAGdJhuBbPn84QREQUQm6OeKpE5z46CN4cGQk4D8SH98l40y7Cj78pm3n8y////f/n8/9/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4gAAAAABAgMFBAUGBwgJCgsMDQ4PEBESExQVFhcYGRoaGxwdHh8gISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0+P0BBQkNERUZHSElKS0xNTk9QUVJTVFVWV1hZWltcXV5fYGFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6e3x9fn8i");
-  audio.volume = 0.5;
-  audio.play().catch(e => console.log("Audio play failed", e));
+// Sound Effects using AudioContext (100% reliable)
+const playTone = (freq: number = 440, type: QuoteOscillatorTypeQuote = "sine", duration: number = 0.1) => {
+  try {
+    const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioContext) return;
+
+    const ctx = new AudioContext();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, ctx.currentTime);
+
+    gain.gain.setValueAtTime(0.1, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.00001, ctx.currentTime + duration);
+
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+
+    osc.start();
+    osc.stop(ctx.currentTime + duration);
+  } catch (e) {
+    console.error("Audio play failed", e);
+  }
 };
 
-const playReceiveSound = () => {
-  // Simple "Ding" sound base64
-  const audio = new Audio("data:audio/mp3;base64,//uQRAAAAWMSLwUIYAAsYkXgoQwAEaYLWfkWgAI0wWs/ItAAAGdJhuBbPn84QREQUQm6OeKpE5z46CN4cGQk4D8SH98l40y7Cj78pm3n8y////f/n8/9/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4h/4gAAAAABAgMFBAUGBwgJCgsMDQ4PEBESExQVFhcYGRoaGxwdHh8gISIjJCUmJygpKissLS4vMDEyMzQ1Njc4OTo7PD0+P0BBQkNERUZHSElKS0xNTk9QUVJTVFVWV1hZWltcXV5fYGFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6e3x9fn8i");
-  audio.volume = 0.5;
-  audio.play().catch(e => console.log("Audio play failed", e));
-};
+const playSendSound = () => playTone(600, "sine", 0.15); // High beep
+const playReceiveSound = () => playTone(400, "sine", 0.2); // Low beep
 
 const Chat = () => {
   const { conversationId } = useParams();
@@ -184,56 +198,60 @@ const Chat = () => {
 
       fetchMessages();
 
-      // Subscribe to new messages
+      // Realtime Subscription
       console.log("Subscribing to messages for conversation:", conversationId);
       const channel = supabase
-        .channel(`messages:${conversationId}`)
+        .channel(`chat_room:${conversationId}`) // Unique channel name
         .on(
           "postgres_changes",
           {
-            event: "INSERT",
+            event: "*", // Listen to all events (INSERT, UPDATE)
             schema: "public",
             table: "messages",
             filter: `conversation_id=eq.${conversationId}`,
           },
           (payload) => {
-            console.log("New message received via realtime:", payload.new);
-            const newMessage = payload.new as Message;
+            console.log("Realtime event received:", payload);
 
-            setMessages((prev) => {
-              // 1. Check if already exists (deduplication)
-              if (prev.some(m => m.id === newMessage.id)) return prev;
+            if (payload.eventType === 'INSERT') {
+              const newMessage = payload.new as Message;
+              setMessages((prev) => {
+                // 1. Check if message already exists (to prevent duplicates)
+                if (prev.some(m => m.id === newMessage.id)) return prev;
 
-              // 2. Remove Optimistic Message (matches content & sender)
-              const filteredPrev = prev.filter(m =>
-                !(m.id.toString().startsWith("temp-") &&
-                  m.content === newMessage.content &&
-                  m.sender_id === newMessage.sender_id)
-              );
+                // 2. Remove Optimistic Message (replace temp message with real one)
+                // We match by content and sender_id since we don't know the temp ID
+                const filteredPrev = prev.filter(m =>
+                  !(m.id.toString().startsWith("temp-") &&
+                    m.content === newMessage.content &&
+                    m.sender_id === newMessage.sender_id)
+                );
+                return [...filteredPrev, newMessage];
+              });
 
-              return [...filteredPrev, newMessage];
-            });
+              // Play Sound for received messages
+              if (newMessage.sender_id !== user.id) {
+                playReceiveSound();
+                // Mark as read immediately
+                supabase.from("messages").update({ is_read: true }).eq("id", newMessage.id);
+              }
 
-            // Play Sound if received from others
-            if (newMessage.sender_id !== user.id) {
-              playReceiveSound();
-              // Mark as read immediately if chat is open
-              supabase
-                .from("messages")
-                .update({ is_read: true })
-                .eq("id", newMessage.id)
-                .then(({ error }) => {
-                  if (error) console.error("Error marking msg as read:", error);
-                });
+            } else if (payload.eventType === 'UPDATE') {
+              // Handle Read Receipts (is_read updates)
+              const updatedMsg = payload.new as Message;
+              setMessages(prev => prev.map(m => m.id === updatedMsg.id ? updatedMsg : m));
             }
           }
         )
         .subscribe((status) => {
-          console.log(`Realtime status for conversation ${conversationId}:`, status);
+          console.log(`Subscription status for ${conversationId}:`, status);
+          if (status === 'SUBSCRIBED') {
+            // Optional: You could show a specialized UI indicator here
+          }
         });
 
       return () => {
-        console.log("Unsubscribing from messages:", conversationId);
+        console.log("Cleaning up subscription...");
         supabase.removeChannel(channel);
       };
     };
@@ -381,9 +399,16 @@ const Chat = () => {
                     }`}
                 >
                   <p className="text-sm whitespace-pre-wrap break-words">{msg.content}</p>
-                  <p className={`text-[10px] mt-1 ${isMe ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
-                    {new Date(msg.created_at).toLocaleTimeString("ar", { hour: "2-digit", minute: "2-digit" })}
-                  </p>
+                  <div className="flex items-center justify-end gap-1 mt-1">
+                    <p className={`text-[10px] ${isMe ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
+                      {new Date(msg.created_at).toLocaleTimeString("ar", { hour: "2-digit", minute: "2-digit" })}
+                    </p>
+                    {isMe && (
+                      <span className={msg.is_read ? "text-blue-200" : "text-primary-foreground/70"}>
+                        {msg.is_read ? "✓✓" : "✓"}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             );
