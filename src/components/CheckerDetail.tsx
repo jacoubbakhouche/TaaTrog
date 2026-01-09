@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { PaymentModal } from "./PaymentModal";
+import { ReviewModal } from "./ReviewModal";
 
 interface CheckerDetailProps {
   checker: DbChecker | null;
@@ -29,6 +30,8 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
   const [api, setApi] = useState<CarouselApi>();
   const [loading, setLoading] = useState(false);
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   useEffect(() => {
     if (!api) {
@@ -58,6 +61,8 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
   }, [checker?.id]);
 
   const [booking, setBooking] = useState<{ id: string; status: string } | null>(null);
+  const [stats, setStats] = useState({ rating: 0, count: 0 });
+  const [reviews, setReviews] = useState<any[]>([]);
   const [paymentOpen, setPaymentOpen] = useState(false);
 
   // Check for existing booking
@@ -83,7 +88,39 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
     }
   }, [isOpen, checker]);
 
+  useEffect(() => {
+    if (!checker?.id) return;
+
+    const fetchReviews = async () => {
+      const { data: reviewsData, error: reviewsError } = await supabase
+        .from("reviews")
+        .select(`
+          rating,
+          review_text,
+          created_at,
+          profiles:client_id ( full_name, avatar_url )
+        `)
+        .eq("checker_id", checker.id)
+        .order("created_at", { ascending: false });
+
+      if (reviewsData && !reviewsError) {
+        setReviews(reviewsData);
+        const count = reviewsData.length;
+        const avg = count > 0
+          ? reviewsData.reduce((acc, curr) => acc + curr.rating, 0) / count
+          : 0;
+        setStats({ count, rating: parseFloat(avg.toFixed(1)) });
+      }
+    };
+
+    fetchReviews();
+  }, [checker?.id, refreshTrigger]);
+
   if (!checker) return null;
+
+  // Use calculated stats if available, else fallback to props
+  const displayRating = stats.count > 0 ? stats.rating : (checker.rating || 0);
+  const displayCount = stats.count > 0 ? stats.count : (checker.reviews_count || 0);
 
   // Get social media platforms that have values
   const socialPlatforms = checker.social_media
@@ -317,21 +354,58 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
               </div>
             )}
 
-            {/* Reviews Section - Premium Card */}
+            {/* Reviews Section */}
             <div className="bg-secondary/30 rounded-[2rem] p-5 border border-border/40">
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-2">
                   <Star className="w-5 h-5 fill-yellow-500 text-yellow-500" />
-                  <span className="text-lg font-black">{checker.rating || 0}</span>
-                  <span className="text-muted-foreground text-sm font-bold">({checker.reviews_count || 0} مراجعة)</span>
+                  <span className="text-lg font-black">{displayRating}</span>
+                  <span className="text-muted-foreground text-sm font-bold">({displayCount} مراجعة)</span>
                 </div>
-                <button className="text-primary text-xs font-black hover:underline tracking-tight">عرض الكل ←</button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-primary text-xs font-black hover:bg-primary/10 h-8 px-3 rounded-full"
+                  onClick={() => setIsReviewModalOpen(true)}
+                >
+                  + أضف تقييمك
+                </Button>
               </div>
-              <div className="bg-background/60 backdrop-blur-sm p-4 rounded-2xl border border-border/30 relative">
-                <p className="text-foreground text-sm font-medium leading-relaxed italic relative z-10">
-                  "تعامل احترافي جداً ونتائج دقيقة وسريعة. أنصح بالتعامل معه بشدة!"
-                </p>
-                <div className="absolute top-2 right-2 text-4xl text-primary/5 font-serif select-none">"</div>
+
+              <div className="space-y-4">
+                {reviews.length > 0 ? (
+                  reviews.map((review, idx) => (
+                    <div key={idx} className="bg-background/60 backdrop-blur-sm p-4 rounded-2xl border border-border/30 relative">
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-8 h-8 rounded-full bg-secondary overflow-hidden">
+                            {review.profiles?.avatar_url ? (
+                              <img src={review.profiles.avatar_url} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              <User className="w-4 h-4 m-2 text-muted-foreground" />
+                            )}
+                          </div>
+                          <div>
+                            <p className="text-xs font-bold">{review.profiles?.full_name || "عميل"}</p>
+                            <div className="flex gap-0.5">
+                              {Array.from({ length: review.rating }).map((_, i) => (
+                                <Star key={i} className="w-3 h-3 fill-yellow-500 text-yellow-500" />
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                        <span className="text-[10px] text-muted-foreground">
+                          {new Date(review.created_at).toLocaleDateString("ar-EG")}
+                        </span>
+                      </div>
+                      <p className="text-foreground text-sm font-medium leading-relaxed italic relative z-10 px-2">
+                        "{review.review_text}"
+                      </p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-center text-sm text-muted-foreground py-4">لا توجد تقييمات بعد</p>
+                )}
               </div>
             </div>
 
@@ -389,6 +463,13 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
           onPaymentSuccess={handlePaymentSuccess}
         />
       )}
+
+      <ReviewModal
+        isOpen={isReviewModalOpen}
+        onClose={() => setIsReviewModalOpen(false)}
+        checkerId={checker.id}
+        onSuccess={() => setRefreshTrigger(prev => prev + 1)}
+      />
 
       {/* Fullscreen Image Viewer */}
       <Dialog open={!!fullscreenImage} onOpenChange={() => setFullscreenImage(null)}>

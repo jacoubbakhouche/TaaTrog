@@ -51,7 +51,8 @@ const Messages = () => {
 
       const checkerId = checkerData?.id;
 
-      // Build query: user is client OR user is checker
+      console.log("Fetching conversations. User:", user.id, "Checker:", checkerId);
+
       let query = supabase
         .from("conversations")
         .select(`
@@ -70,14 +71,16 @@ const Messages = () => {
         .order("updated_at", { ascending: false });
 
       if (checkerId) {
-        // Complex OR: (Am User AND Not Deleted) OR (Am Checker AND Not Deleted)
+        // User is a Checker: Get conversations where they are Client OR Checker
+        // Note: Using raw string for OR filter to handle the complex logic
+        // We want: (user_id = user.id AND deleted_for_user = false) OR (checker_id = checkerId AND deleted_for_checker = false)
         query = query.or(`and(user_id.eq.${user.id},deleted_for_user.is.false),and(checker_id.eq.${checkerId},deleted_for_checker.is.false)`);
       } else {
-        // Simple User
+        // Regular User: Only where they are the client
         query = query.eq("user_id", user.id).eq("deleted_for_user", false);
       }
 
-      const { data: convs, error } = await query as any;
+      const { data: convs, error } = await query;
 
       if (error) {
         console.error("Error fetching conversations:", error);
@@ -85,7 +88,9 @@ const Messages = () => {
         return;
       }
 
-      // Fetch last message and unread count for each conversation
+      console.log("Conversations found:", convs?.length);
+
+      // Fetch last message and unread count
       const conversationsWithMessages = await Promise.all(
         (convs || []).map(async (conv: any) => {
           const { data: lastMsg } = await supabase
@@ -101,7 +106,7 @@ const Messages = () => {
             .select("*", { count: "exact", head: true })
             .eq("conversation_id", conv.id)
             .eq("is_read", false)
-            .neq("sender_id", user.id);
+            .neq("sender_id", user.id); // Valid for both: if I am user, sender!=me (checker). If I am checker, sender!=me (user).
 
           return {
             ...conv,
@@ -111,25 +116,29 @@ const Messages = () => {
         })
       );
 
-      // VISIBILITY LOGIC:
-      // Checkers (who are not the client in the convo) should ONLY see 'paid', 'approved', 'active', 'completed'.
-      // Clients see everything.
-      const finalConversations = conversationsWithMessages.filter((conv: any) => {
-        const isImClient = conv.user_id === user.id;
-
-        if (isImClient) return true; // Clients always see their chats (unless deleted, which is handled by query)
-
-        // I am the Checker
-        // Check status
-        const visibleStatuses = ['paid', 'approved', 'active', 'completed'];
-        return visibleStatuses.includes(conv.status || '');
-      });
-
-      setConversations(finalConversations as Conversation[]);
+      // No Filtering: Show everything found by the query
+      setConversations(conversationsWithMessages as Conversation[]);
       setLoading(false);
     };
 
     fetchConversations();
+
+    // Realtime Subscription
+    const channel = supabase
+      .channel('public:conversations_list')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'conversations' },
+        (payload) => {
+          console.log("Conversation update received!", payload);
+          fetchConversations();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [navigate]);
 
   const formatDate = (dateString: string) => {
@@ -191,7 +200,12 @@ const Messages = () => {
           </div>
         ) : (
           conversations.map((conv) => {
-            const isImChecker = conv.checkers?.user_id === currentUserId;
+            const isImChecker = currentUserId === conv.checker_id || conv.checkers?.user_id === currentUserId;
+
+            // Logic:
+            // If I am the Checker -> Show Client Info (from `profiles` relation)
+            // If I am the Client -> Show Checker Info (from `checkers` relation)
+
             const partnerName = isImChecker
               ? (conv.profiles?.full_name || "عميل")
               : (conv.checkers?.display_name || "مستخدم");

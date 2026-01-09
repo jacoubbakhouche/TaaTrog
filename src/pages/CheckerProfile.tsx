@@ -35,6 +35,8 @@ const CheckerProfile = () => {
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [checkerId, setCheckerId] = useState<string | null>(null);
+  const [profileId, setProfileId] = useState<string | null>(null);
+  const [isChecker, setIsChecker] = useState(false);
 
   const [formData, setFormData] = useState({
     display_name: "",
@@ -49,10 +51,10 @@ const CheckerProfile = () => {
   });
 
   useEffect(() => {
-    loadCheckerProfile();
+    loadProfile();
   }, []);
 
-  const loadCheckerProfile = async () => {
+  const loadProfile = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) {
@@ -60,31 +62,55 @@ const CheckerProfile = () => {
         return;
       }
 
-      // Check if user is a checker
-      const { data: checker, error } = await supabase
+      // 1. Try to find Checker Profile
+      const { data: checker } = await supabase
         .from("checkers")
         .select("*")
         .eq("user_id", user.id)
-        .single();
+        .maybeSingle();
 
-      if (error || !checker) {
-        toast.error("لم يتم العثور على ملف المتحقق");
-        navigate("/");
-        return;
+      if (checker) {
+        setIsChecker(true);
+        setCheckerId(checker.id);
+        setFormData({
+          display_name: checker.display_name || "",
+          age: checker.age?.toString() || "",
+          gender: checker.gender || "male",
+          description: checker.description || "",
+          price: checker.price?.toString() || "",
+          avatar_url: checker.avatar_url || "",
+          languages: checker.languages || [],
+          social_media: (checker.social_media as Record<string, string>) || {},
+          gallery_images: (checker as any).gallery_images || [],
+        });
+      } else {
+        // 2. Fallback to Regular User Profile
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("user_id", user.id)
+          .maybeSingle();
+
+        if (profile) {
+          setIsChecker(false);
+          setProfileId(profile.id);
+          setFormData({
+            display_name: profile.full_name || "",
+            age: profile.age?.toString() || "",
+            gender: profile.gender || "male",
+            description: "",
+            price: "",
+            avatar_url: profile.avatar_url || "",
+            languages: [],
+            social_media: {},
+            gallery_images: [],
+          });
+        } else {
+          toast.error("لم يتم العثور على الملف الشخصي");
+          navigate("/auth");
+          return;
+        }
       }
-
-      setCheckerId(checker.id);
-      setFormData({
-        display_name: checker.display_name || "",
-        age: checker.age?.toString() || "",
-        gender: checker.gender || "male",
-        description: checker.description || "",
-        price: checker.price?.toString() || "",
-        avatar_url: checker.avatar_url || "",
-        languages: checker.languages || [],
-        social_media: (checker.social_media as Record<string, string>) || {},
-        gallery_images: (checker as any).gallery_images || [],
-      });
     } catch (error) {
       console.error("Error loading profile:", error);
       toast.error("حدث خطأ في تحميل الملف الشخصي");
@@ -114,6 +140,11 @@ const CheckerProfile = () => {
 
       const fileExt = file.name.split(".").pop();
       const fileName = `${user.id}/${Date.now()}.${fileExt}`;
+      const bucketName = isChecker ? "checker-images" : "avatars"; // Use different buckets if needed, or same
+
+      // Note: Make sure "checker-images" allows public upload OR create "avatars" bucket
+      // For simplicity, let's reuse "checker-images" if RLS allows, or use "avatars" if exists.
+      // Assuming "checker-images" is the main public bucket for now.
 
       const { error: uploadError } = await supabase.storage
         .from("checker-images")
@@ -201,39 +232,56 @@ const CheckerProfile = () => {
   };
 
   const handleSave = async () => {
-    if (!checkerId) return;
-
     if (!formData.display_name.trim()) {
-      toast.error("يرجى إدخال اسم العرض");
-      return;
-    }
-
-    if (!formData.price || parseFloat(formData.price) <= 0) {
-      toast.error("يرجى إدخال سعر صالح");
+      toast.error("يرجى إدخال الاسم");
       return;
     }
 
     setSaving(true);
     try {
-      const { error } = await supabase
-        .from("checkers")
-        .update({
-          display_name: formData.display_name,
-          age: formData.age ? parseInt(formData.age) : null,
-          gender: formData.gender,
-          description: formData.description,
-          price: parseFloat(formData.price),
-          avatar_url: formData.avatar_url,
-          languages: formData.languages,
-          social_media: formData.social_media,
-          gallery_images: formData.gallery_images,
-        } as any)
-        .eq("id", checkerId);
+      if (isChecker && checkerId) {
+        // Update Checker
+        if (!formData.price || parseFloat(formData.price) <= 0) {
+          toast.error("يرجى إدخال سعر صالح");
+          setSaving(false);
+          return;
+        }
 
-      if (error) throw error;
+        const { error } = await supabase
+          .from("checkers")
+          .update({
+            display_name: formData.display_name,
+            age: formData.age ? parseInt(formData.age) : null,
+            gender: formData.gender,
+            description: formData.description,
+            price: parseFloat(formData.price),
+            avatar_url: formData.avatar_url,
+            languages: formData.languages,
+            social_media: formData.social_media,
+            gallery_images: formData.gallery_images,
+          } as any)
+          .eq("id", checkerId);
 
-      await queryClient.invalidateQueries({ queryKey: ["checkers"] });
+        if (error) throw error;
+        await queryClient.invalidateQueries({ queryKey: ["checkers"] });
+
+      } else if (!isChecker && profileId) {
+        // Update Client Profile
+        const { error } = await supabase
+          .from("profiles")
+          .update({
+            full_name: formData.display_name,
+            avatar_url: formData.avatar_url,
+            age: formData.age ? parseInt(formData.age) : null,
+            gender: formData.gender
+          })
+          .eq("id", profileId);
+
+        if (error) throw error;
+      }
+
       toast.success("تم حفظ الملف الشخصي بنجاح");
+      navigate(-1); // Go back after save
     } catch (error) {
       console.error("Save error:", error);
       toast.error("فشل في حفظ الملف الشخصي");
@@ -253,26 +301,8 @@ const CheckerProfile = () => {
 
         <div className="p-4 space-y-8 flex flex-col items-center">
           <Skeleton className="w-28 h-28 rounded-full" />
-
           <div className="w-full space-y-4 mt-4">
-            <Skeleton className="h-4 w-24 ml-auto" />
             <Skeleton className="h-10 w-full" />
-          </div>
-
-          <div className="w-full grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Skeleton className="h-4 w-16 ml-auto" />
-              <Skeleton className="h-10 w-full" />
-            </div>
-            <div className="space-y-2">
-              <Skeleton className="h-4 w-16 ml-auto" />
-              <Skeleton className="h-10 w-full" />
-            </div>
-          </div>
-
-          <div className="w-full space-y-2">
-            <Skeleton className="h-4 w-24 ml-auto" />
-            <Skeleton className="h-24 w-full" />
           </div>
         </div>
       </div>
@@ -290,7 +320,9 @@ const CheckerProfile = () => {
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
-          <h1 className="text-lg font-bold">ملفي الشخصي</h1>
+          <h1 className="text-lg font-bold">
+            {isChecker ? "ملف المتحقق" : "حسابي"}
+          </h1>
           <Button onClick={handleSave} disabled={saving} size="sm">
             <Save className="w-4 h-4 mr-2" />
             {saving ? "جاري الحفظ..." : "حفظ"}
@@ -336,179 +368,221 @@ const CheckerProfile = () => {
         {/* Basic Info */}
         <div className="space-y-4">
           <div>
-            <Label>اسم العرض *</Label>
+            <Label>الاسم *</Label>
             <Input
               value={formData.display_name}
               onChange={e => setFormData(prev => ({ ...prev, display_name: e.target.value }))}
-              placeholder="اسمك الذي سيظهر للعملاء"
+              placeholder="اسمك الظاهر"
               className="mt-1"
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <Label>العمر</Label>
-              <Input
-                type="number"
-                value={formData.age}
-                onChange={e => setFormData(prev => ({ ...prev, age: e.target.value }))}
-                placeholder="25"
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <Label>السعر ($) *</Label>
-              <Input
-                type="number"
-                value={formData.price}
-                onChange={e => setFormData(prev => ({ ...prev, price: e.target.value }))}
-                placeholder="50"
-                className="mt-1"
-              />
-            </div>
-          </div>
-
-          <div>
-            <Label>الجنس</Label>
-            <div className="flex gap-2 mt-1">
-              {[
-                { value: "male", label: "ذكر" },
-                { value: "female", label: "أنثى" },
-                { value: "other", label: "آخر" },
-              ].map(option => (
-                <Button
-                  key={option.value}
-                  type="button"
-                  variant={formData.gender === option.value ? "default" : "outline"}
-                  onClick={() => setFormData(prev => ({ ...prev, gender: option.value }))}
-                  className="flex-1"
-                >
-                  {option.label}
-                </Button>
-              ))}
-            </div>
-          </div>
-
-          <div>
-            <Label>الوصف</Label>
-            <Textarea
-              value={formData.description}
-              onChange={e => setFormData(prev => ({ ...prev, description: e.target.value }))}
-              placeholder="اكتب نبذة عنك وخبرتك..."
-              className="mt-1 min-h-[100px]"
-            />
-          </div>
-        </div>
-
-        {/* Photo Gallery */}
-        <div>
-          <Label className="mb-3 block">معرض الصور ({formData.gallery_images.length}/6)</Label>
-          <div className="grid grid-cols-3 gap-2">
-            {formData.gallery_images.map((url, index) => (
-              <div key={index} className="relative aspect-square rounded-lg overflow-hidden bg-secondary">
-                <img src={url} alt={`Gallery ${index + 1}`} className="w-full h-full object-cover" />
-                <button
-                  type="button"
-                  onClick={() => removeGalleryImage(index)}
-                  className="absolute top-1 right-1 w-6 h-6 bg-destructive rounded-full flex items-center justify-center"
-                >
-                  <Trash2 className="w-3 h-3 text-destructive-foreground" />
-                </button>
-              </div>
-            ))}
-            {formData.gallery_images.length < 6 && (
-              <label className="aspect-square rounded-lg border-2 border-dashed border-border flex flex-col items-center justify-center cursor-pointer hover:border-primary transition-colors">
-                <input
-                  type="file"
-                  accept="image/*"
-                  multiple
-                  onChange={handleGalleryUpload}
-                  className="hidden"
-                  disabled={uploading}
+          {!isChecker && (
+            // Simple Gender/Age for users if needed, or remove if too much info
+            // For now, let's keep it simple or allow basic edits
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label>العمر</Label>
+                <Input
+                  type="number"
+                  value={formData.age}
+                  onChange={e => setFormData(prev => ({ ...prev, age: e.target.value }))}
+                  placeholder="25"
+                  className="mt-1"
                 />
-                {uploading ? (
-                  <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <>
-                    <Image className="w-6 h-6 text-muted-foreground mb-1" />
-                    <span className="text-xs text-muted-foreground">إضافة صور</span>
-                  </>
-                )}
-              </label>
-            )}
-          </div>
-        </div>
-
-        {/* Languages */}
-        <div>
-          <Label className="mb-2 block">اللغات التي تتحدثها</Label>
-          <div className="flex flex-wrap gap-2">
-            {AVAILABLE_LANGUAGES.map(lang => (
-              <Badge
-                key={lang}
-                variant={formData.languages.includes(lang) ? "default" : "outline"}
-                className="cursor-pointer transition-all"
-                onClick={() => toggleLanguage(lang)}
-              >
-                {lang}
-                {formData.languages.includes(lang) && (
-                  <X className="w-3 h-3 ml-1" />
-                )}
-              </Badge>
-            ))}
-          </div>
-        </div>
-
-        {/* Social Media Selection - Premium UI */}
-        <div>
-          <Label className="mb-3 block">وسائل التواصل الاجتماعي التي تعمل عليها</Label>
-          <div className="grid grid-cols-2 gap-3">
-            {SOCIAL_PLATFORMS.map(platform => {
-              const Icon = platform.icon;
-              const isActive = !!formData.social_media[platform.key];
-
-              return (
-                <div
-                  key={platform.key}
-                  onClick={() => {
-                    setFormData(prev => ({
-                      ...prev,
-                      social_media: {
-                        ...prev.social_media,
-                        [platform.key]: isActive ? "" : "active"
-                      },
-                    }));
-                  }}
-                  className={cn(
-                    "flex items-center gap-3 p-3 rounded-2xl border-2 transition-all cursor-pointer select-none",
-                    isActive
-                      ? "bg-primary/10 border-primary shadow-sm"
-                      : "bg-card border-border hover:border-primary/30"
-                  )}
-                >
-                  <div className={cn(
-                    "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors",
-                    isActive ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"
-                  )}>
-                    <Icon className="w-4 h-4" />
-                  </div>
-                  <span className={cn(
-                    "text-sm font-bold tracking-tight",
-                    isActive ? "text-foreground" : "text-muted-foreground"
-                  )}>
-                    {platform.label}
-                  </span>
-                  {isActive && (
-                    <div className="ml-auto w-2 h-2 rounded-full bg-primary animate-pulse" />
-                  )}
+              </div>
+              <div>
+                <Label>الجنس</Label>
+                <div className="flex gap-2 mt-1">
+                  {[
+                    { value: "male", label: "ذكر" },
+                    { value: "female", label: "أنثى" },
+                  ].map(option => (
+                    <Button
+                      key={option.value}
+                      type="button"
+                      variant={formData.gender === option.value ? "default" : "outline"}
+                      onClick={() => setFormData(prev => ({ ...prev, gender: option.value }))}
+                      className="flex-1 h-9 text-xs"
+                    >
+                      {option.label}
+                    </Button>
+                  ))}
                 </div>
-              );
-            })}
-          </div>
-          <p className="text-[10px] text-muted-foreground mt-3 font-medium">
-            * اضغط على المنصات التي تستخدمها في إجراء اختبارات الولاء
-          </p>
+              </div>
+            </div>
+          )}
+
+          {isChecker && (
+            <>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>العمر</Label>
+                  <Input
+                    type="number"
+                    value={formData.age}
+                    onChange={e => setFormData(prev => ({ ...prev, age: e.target.value }))}
+                    placeholder="25"
+                    className="mt-1"
+                  />
+                </div>
+                <div>
+                  <Label>السعر ($) *</Label>
+                  <Input
+                    type="number"
+                    value={formData.price}
+                    onChange={e => setFormData(prev => ({ ...prev, price: e.target.value }))}
+                    placeholder="50"
+                    className="mt-1"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label>الجنس</Label>
+                <div className="flex gap-2 mt-1">
+                  {[
+                    { value: "male", label: "ذكر" },
+                    { value: "female", label: "أنثى" },
+                    { value: "other", label: "آخر" },
+                  ].map(option => (
+                    <Button
+                      key={option.value}
+                      type="button"
+                      variant={formData.gender === option.value ? "default" : "outline"}
+                      onClick={() => setFormData(prev => ({ ...prev, gender: option.value }))}
+                      className="flex-1"
+                    >
+                      {option.label}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <Label>الوصف</Label>
+                <Textarea
+                  value={formData.description}
+                  onChange={e => setFormData(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="اكتب نبذة عنك وخبرتك..."
+                  className="mt-1 min-h-[100px]"
+                />
+              </div>
+            </>
+          )}
         </div>
+
+        {/* Checker Specific Sections */}
+        {isChecker && (
+          <>
+            {/* Photo Gallery */}
+            <div>
+              <Label className="mb-3 block">معرض الصور ({formData.gallery_images.length}/6)</Label>
+              <div className="grid grid-cols-3 gap-2">
+                {formData.gallery_images.map((url, index) => (
+                  <div key={index} className="relative aspect-square rounded-lg overflow-hidden bg-secondary">
+                    <img src={url} alt={`Gallery ${index + 1}`} className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => removeGalleryImage(index)}
+                      className="absolute top-1 right-1 w-6 h-6 bg-destructive rounded-full flex items-center justify-center"
+                    >
+                      <Trash2 className="w-3 h-3 text-destructive-foreground" />
+                    </button>
+                  </div>
+                ))}
+                {formData.gallery_images.length < 6 && (
+                  <label className="aspect-square rounded-lg border-2 border-dashed border-border flex flex-col items-center justify-center cursor-pointer hover:border-primary transition-colors">
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={handleGalleryUpload}
+                      className="hidden"
+                      disabled={uploading}
+                    />
+                    {uploading ? (
+                      <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <>
+                        <Image className="w-6 h-6 text-muted-foreground mb-1" />
+                        <span className="text-xs text-muted-foreground">إضافة صور</span>
+                      </>
+                    )}
+                  </label>
+                )}
+              </div>
+            </div>
+
+            {/* Languages */}
+            <div>
+              <Label className="mb-2 block">اللغات التي تتحدثها</Label>
+              <div className="flex flex-wrap gap-2">
+                {AVAILABLE_LANGUAGES.map(lang => (
+                  <Badge
+                    key={lang}
+                    variant={formData.languages.includes(lang) ? "default" : "outline"}
+                    className="cursor-pointer transition-all"
+                    onClick={() => toggleLanguage(lang)}
+                  >
+                    {lang}
+                    {formData.languages.includes(lang) && (
+                      <X className="w-3 h-3 ml-1" />
+                    )}
+                  </Badge>
+                ))}
+              </div>
+            </div>
+
+            {/* Social Media Selection */}
+            <div>
+              <Label className="mb-3 block">وسائل التواصل الاجتماعي التي تعمل عليها</Label>
+              <div className="grid grid-cols-2 gap-3">
+                {SOCIAL_PLATFORMS.map(platform => {
+                  const Icon = platform.icon;
+                  const isActive = !!formData.social_media[platform.key];
+
+                  return (
+                    <div
+                      key={platform.key}
+                      onClick={() => {
+                        setFormData(prev => ({
+                          ...prev,
+                          social_media: {
+                            ...prev.social_media,
+                            [platform.key]: isActive ? "" : "active"
+                          },
+                        }));
+                      }}
+                      className={cn(
+                        "flex items-center gap-3 p-3 rounded-2xl border-2 transition-all cursor-pointer select-none",
+                        isActive
+                          ? "bg-primary/10 border-primary shadow-sm"
+                          : "bg-card border-border hover:border-primary/30"
+                      )}
+                    >
+                      <div className={cn(
+                        "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-colors",
+                        isActive ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"
+                      )}>
+                        <Icon className="w-4 h-4" />
+                      </div>
+                      <span className={cn(
+                        "text-sm font-bold tracking-tight",
+                        isActive ? "text-foreground" : "text-muted-foreground"
+                      )}>
+                        {platform.label}
+                      </span>
+                      {isActive && (
+                        <div className="ml-auto w-2 h-2 rounded-full bg-primary animate-pulse" />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

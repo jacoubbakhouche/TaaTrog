@@ -4,8 +4,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
-import { ChevronLeft, Send, User, Shield } from "lucide-react";
+import { ChevronLeft, Send, User, Shield, Star } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { ReviewModal } from "@/components/ReviewModal";
 
 
 import { PaymentModal } from "@/components/PaymentModal";
@@ -16,6 +17,9 @@ interface Message {
   sender_id: string;
   created_at: string;
   is_read: boolean;
+  read_at?: string; // New field
+  deleted_by_sender?: boolean;
+  deleted_by_receiver?: boolean;
 }
 
 interface Checker {
@@ -27,7 +31,7 @@ interface Checker {
 
 // Sound Effects
 // Sound Effects using AudioContext (100% reliable)
-const playTone = (freq: number = 440, type: QuoteOscillatorTypeQuote = "sine", duration: number = 0.1) => {
+const playTone = (freq: number = 440, type: OscillatorType = "sine", duration: number = 0.1) => {
   try {
     const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
     if (!AudioContext) return;
@@ -76,6 +80,8 @@ const Chat = () => {
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isImChecker, setIsImChecker] = useState(false);
   const [activationRequests, setActivationRequests] = useState<any[]>([]);
+  const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [currentCheckerId, setCurrentCheckerId] = useState<string | null>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -106,6 +112,7 @@ const Chat = () => {
 
       if (conv) {
         setClientUserId(conv.user_id);
+        setCurrentCheckerId(conv.checker_id); // Capture checker ID for review
       }
 
       if (convError || !conv) {
@@ -116,64 +123,38 @@ const Chat = () => {
       }
 
       // 2. Determine Role
-      setConversationStatus(conv.status); // Set Status for Locking Logic
+      // 2. Determine Role Robustly
+      setConversationStatus(conv.status);
       setConversationPrice(conv.price || 0);
 
-      const imChecker = conv.checker_id && (user.id !== conv.user_id);
-      setIsImChecker(!!imChecker);
+      // Check if I am the checker for this specific conversation
+      const { data: myChecker } = await supabase
+        .from("checkers")
+        .select("id")
+        .eq("user_id", user.id)
+        .maybeSingle();
 
-      // 2.5 If Admin/Support, Check for Activation Requests
-      if (imChecker) {
-        // Fetch ALL pending requests for this user
-        const { data: reqs } = await supabase
-          .from('activation_requests')
-          .select('*')
-          .eq('user_id', conv.user_id)
-          .eq('status', 'pending')
-          .order('created_at', { ascending: false });
+      const isMeTheChecker = myChecker?.id === conv.checker_id;
+      setIsImChecker(isMeTheChecker);
 
-        console.log("Admin Banner Debug:", { imChecker, userId: conv.user_id, reqs });
-
-        if (reqs && reqs.length > 0) {
-          setActivationRequests(reqs);
-        } else {
-          // Fallback: If no requests found, check for ANY pending/locked conversation.
-          // Broaden the search to catch any relevant service chat for this user.
-          const { data: pendingConvs } = await supabase
-            .from('conversations')
-            .select('id')
-            .eq('user_id', conv.user_id)
-            .neq('status', 'paid') // Anything not paid is potentially lockable/activatable
-            .neq('id', conversationId) // don't find self (support chat)
-            .order('updated_at', { ascending: false })
-            .limit(1);
-
-          if (pendingConvs && pendingConvs.length > 0) {
-            // Create fake request objects for the UI
-            setActivationRequests(pendingConvs.map(c => ({
-              id: `temp-${c.id}`,
-              conversation_id: c.id,
-              status: 'pending'
-            })));
-          }
-        }
-      }
+      console.log("Role Debug:", { isMeTheChecker, myCheckerId: myChecker?.id, convCheckerId: conv.checker_id });
 
       let partnerNameFound = "مستخدم";
       let partnerAvatarFound = null;
 
-      if (imChecker) {
+      if (isMeTheChecker) {
         // I am the Checker -> Fetch Client Profile
         const { data: clientProfile } = await supabase
           .from("profiles")
           .select("full_name, avatar_url")
-          .eq("id", conv.user_id) // Assuming id is join key, but we fixed FK to user_id. 
-          // If FK is on user_id, we should query by user_id
-          .eq("user_id", conv.user_id)
+          .eq("user_id", conv.user_id) // Match by user_id
           .maybeSingle();
 
-        // Fallback query by 'id' if 'user_id' column logic is mixed
-        if (!clientProfile) {
+        if (clientProfile) {
+          partnerNameFound = clientProfile.full_name || "عميل";
+          partnerAvatarFound = clientProfile.avatar_url;
+        } else {
+          // Fallback: Check if profile ID matches user_id (sometimes same)
           const { data: clientProfileById } = await supabase
             .from("profiles")
             .select("full_name, avatar_url")
@@ -183,18 +164,12 @@ const Chat = () => {
             partnerNameFound = clientProfileById.full_name || "عميل";
             partnerAvatarFound = clientProfileById.avatar_url;
           }
-        } else {
-          partnerNameFound = clientProfile.full_name || "عميل";
-          partnerAvatarFound = clientProfile.avatar_url;
         }
-
       } else {
         // I am the Client -> Fetch Checker Profile
-
-        // Special Case: If this is a Payment Negotiation with Admin, show "Support"
         if (conv.status === 'payment_negotiation') {
           partnerNameFound = "الإدارة (الدعم الفني) 🛡️";
-          partnerAvatarFound = null; // Or use a static support image
+          partnerAvatarFound = null;
         } else {
           const { data: checkerProfile } = await supabase
             .from("checkers")
@@ -280,8 +255,20 @@ const Chat = () => {
               }
 
             } else if (payload.eventType === 'UPDATE') {
-              // Handle Read Receipts (is_read updates)
               const updatedMsg = payload.new as Message;
+
+              // Handle Soft Deletion via Realtime
+              const isMeSender = updatedMsg.sender_id === user.id;
+              if (isMeSender && updatedMsg.deleted_by_sender) {
+                setMessages(prev => prev.filter(m => m.id !== updatedMsg.id));
+                return;
+              }
+              if (!isMeSender && updatedMsg.deleted_by_receiver) {
+                setMessages(prev => prev.filter(m => m.id !== updatedMsg.id));
+                return;
+              }
+
+              // Handle Read Receipts & Update
               setMessages(prev => prev.map(m => m.id === updatedMsg.id ? updatedMsg : m));
             }
           }
@@ -301,6 +288,21 @@ const Chat = () => {
 
     setupChat();
   }, [conversationId, navigate, toast]);
+
+  // Client-side Expiry Timer (Clean up messages > 1 minute after read)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setMessages(prev => prev.filter(msg => {
+        if (!msg.read_at) return true;
+        const readTime = new Date(msg.read_at).getTime();
+        const now = Date.now();
+        // 60 seconds * 1000 ms
+        return (now - readTime) < 60000;
+      }));
+    }, 5000); // Check every 5 seconds
+
+    return () => clearInterval(interval);
+  }, []);
 
 
 
@@ -417,11 +419,28 @@ const Chat = () => {
           <h2 className="font-bold text-foreground truncate">{partnerName}</h2>
           <p className="text-[10px] text-online font-bold uppercase tracking-wider">متصل الآن</p>
         </div>
+
+        {/* Review Button for Client Only */}
+        {!isImChecker && currentCheckerId && (
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => setIsReviewModalOpen(true)}
+            className="text-yellow-400 hover:text-yellow-500 hover:bg-yellow-400/10"
+          >
+            <Star className="w-5 h-5 fill-current" />
+          </Button>
+        )}
       </div>
 
 
 
-      {/* Admin Activation Banner Removed - Moved to dedicated /admin/activation page */}
+      {/* Ephemeral Notice */}
+      <div className="bg-yellow-500/10 border-b border-yellow-500/20 p-2 overflow-hidden relative">
+        <div className="animate-marquee whitespace-nowrap flex items-center gap-4 text-xs font-medium text-yellow-600 dark:text-yellow-400">
+          ⚠️ تنبيه: يتم حذف الرسائل تلقائياً من الطرفين بعد دقيقة واحدة من قراءتها لضمان الخصوصية.
+        </div>
+      </div>
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
@@ -501,6 +520,13 @@ const Chat = () => {
           />
         )
       }
+      {currentCheckerId && (
+        <ReviewModal
+          isOpen={isReviewModalOpen}
+          onClose={() => setIsReviewModalOpen(false)}
+          checkerId={currentCheckerId}
+        />
+      )}
     </div >
   );
 };
