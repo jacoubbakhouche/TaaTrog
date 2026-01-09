@@ -125,8 +125,8 @@ const Auth = () => {
           <button
             onClick={() => setIsLogin(true)}
             className={`flex-1 rounded-full px-4 py-3 text-sm font-semibold transition-all ${isLogin
-                ? "bg-card shadow-sm text-foreground"
-                : "text-muted-foreground"
+              ? "bg-card shadow-sm text-foreground"
+              : "text-muted-foreground"
               }`}
           >
             تسجيل الدخول
@@ -134,8 +134,8 @@ const Auth = () => {
           <button
             onClick={() => setIsLogin(false)}
             className={`flex-1 rounded-full px-4 py-3 text-sm font-semibold transition-all ${!isLogin
-                ? "bg-card shadow-sm text-foreground"
-                : "text-muted-foreground"
+              ? "bg-card shadow-sm text-foreground"
+              : "text-muted-foreground"
               }`}
           >
             إنشاء حساب
@@ -217,11 +217,22 @@ const Auth = () => {
           <Button
             variant="outline"
             className="w-full h-14 rounded-2xl gap-3"
-            onClick={() => {
-              toast({
-                title: "قريباً",
-                description: "تسجيل الدخول عبر Google سيكون متاحاً قريباً",
-              });
+            onClick={async () => {
+              try {
+                const { error } = await supabase.auth.signInWithOAuth({
+                  provider: 'google',
+                  options: {
+                    redirectTo: `${window.location.origin}/explore`, // or your callback URL
+                  },
+                });
+                if (error) throw error;
+              } catch (e: any) {
+                toast({
+                  title: "خطأ",
+                  description: e.message,
+                  variant: "destructive"
+                });
+              }
             }}
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24">

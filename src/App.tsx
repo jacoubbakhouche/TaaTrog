@@ -9,6 +9,7 @@ import Auth from "./pages/Auth";
 import CheckerProfile from "./pages/CheckerProfile";
 import BecomeChecker from "./pages/BecomeChecker";
 import Admin from "./pages/Admin";
+import AdminActivation from "./pages/AdminActivation";
 import Messages from "./pages/Messages";
 import Chat from "./pages/Chat";
 import ClientProfile from "./pages/ClientProfile";
@@ -33,6 +34,7 @@ const App = () => (
             <Route path="/become-checker" element={<BecomeChecker />} />
             <Route path="/profile" element={<ClientProfile />} />
             <Route path="/admin" element={<Admin />} />
+            <Route path="/admin/activation" element={<AdminActivation />} />
             <Route path="/messages" element={<Messages />} />
             <Route path="/chat/:conversationId" element={<Chat />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

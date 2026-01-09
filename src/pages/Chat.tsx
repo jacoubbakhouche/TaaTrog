@@ -137,13 +137,16 @@ const Chat = () => {
         if (reqs && reqs.length > 0) {
           setActivationRequests(reqs);
         } else {
-          // Fallback: If no requests found, check for ANY pending conversation to support "old" flow or "missing request" flow
+          // Fallback: If no requests found, check for ANY pending/locked conversation.
+          // Broaden the search to catch any relevant service chat for this user.
           const { data: pendingConvs } = await supabase
             .from('conversations')
             .select('id')
             .eq('user_id', conv.user_id)
-            .in('status', ['payment_pending', 'pending_approval'])
-            .neq('id', conversationId); // don't find self
+            .neq('status', 'paid') // Anything not paid is potentially lockable/activatable
+            .neq('id', conversationId) // don't find self (support chat)
+            .order('updated_at', { ascending: false })
+            .limit(1);
 
           if (pendingConvs && pendingConvs.length > 0) {
             // Create fake request objects for the UI
@@ -418,100 +421,7 @@ const Chat = () => {
 
 
 
-      {/* Admin Activation Banner - Simplified for One-Click Workflow */}
-      {isImChecker && (conversationStatus === 'payment_negotiation' || (activationRequests && activationRequests.length > 0)) && (
-        <div className="bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/10 dark:to-orange-900/10 border-b border-yellow-200/50 p-4 sticky top-[65px] z-10 backdrop-blur-xl shadow-sm animate-in slide-in-from-top-2">
-
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="bg-gradient-to-br from-yellow-400 to-orange-500 p-2.5 rounded-2xl shadow-lg shadow-orange-500/20">
-                <Shield className="w-5 h-5 text-white" />
-              </div>
-              <div>
-                <h3 className="font-bold text-sm text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                  لوحة التحكم
-                  {activationRequests && activationRequests.length > 0 && (
-                    <span className="bg-red-100 text-red-600 text-[10px] px-2 py-0.5 rounded-full animate-pulse">
-                      يوجد طلب {activationRequests.length}
-                    </span>
-                  )}
-                </h3>
-                <p className="text-[11px] text-gray-500 dark:text-gray-400">تفعيل الدردشة للعميل والمختبر</p>
-              </div>
-            </div>
-
-            {/* Subtle Delete Button */}
-            {(!activationRequests || activationRequests.length === 0) && (
-              <button
-                onClick={async () => {
-                  if (confirm("حذف هذه المحادثة؟")) {
-                    await supabase.from('conversations').delete().eq('id', conversationId);
-                    navigate('/messages');
-                  }
-                }}
-                className="mr-2 text-gray-400 hover:text-red-500 p-2 rounded-full hover:bg-red-50 transition-colors"
-                title="حذف التذكرة"
-              >
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
-              </button>
-            )}
-          </div>
-
-          <div className="mt-4 w-full">
-            {activationRequests && activationRequests.length > 0 ? (
-              <div className="bg-white/60 dark:bg-gray-800/60 rounded-xl p-3 border border-yellow-100 dark:border-yellow-900/30 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
-                  <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">طلب تفعيل معلق</p>
-                </div>
-
-                <Button
-                  size="sm"
-                  onClick={async () => {
-                    const req = activationRequests[0]; // Take the first one
-                    try {
-                      toast({ title: "جاري التفعيل...", description: "يتم فتح الدردشة للطرفين..." });
-
-                      // 1. Set Conversation to 'approved' (Unlock Mode)
-                      // This allows User & Tester to see the 'Start Chat' button
-                      const { error: updateError } = await supabase
-                        .from('conversations')
-                        .update({ status: 'approved' } as any)
-                        .eq('id', req.conversation_id);
-
-                      if (updateError) throw updateError;
-
-                      // 2. Approve Request
-                      await supabase.from('activation_requests').update({ status: 'approved' } as any).eq('id', req.id);
-
-                      // 3. Notify Support Chat
-                      await supabase.from("messages").insert({
-                        conversation_id: conversationId,
-                        sender_id: currentUserId,
-                        content: `✅ تم قبول الطلب! ظهر زر "تأكيد البدء" للعميل والمختبر الآن.`
-                      });
-
-                      toast({ title: "تم القبول!", description: "ينتظر الآن تأكيد العميل/المختبر للدخول." });
-                      setActivationRequests(prev => prev.slice(1));
-
-                    } catch (e) {
-                      console.error(e);
-                      toast({ title: "خطأ", description: "فشل العملية" });
-                    }
-                  }}
-                  className="bg-black text-white hover:bg-gray-800 px-6 h-9 rounded-lg shadow-lg shadow-yellow-500/20"
-                >
-                  تفعيل الدردشة 🔓
-                </Button>
-              </div>
-            ) : (
-              <div className="text-center py-2">
-                <p className="text-[10px] text-gray-400">لا توجد طلبات معلقة حالياً</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Admin Activation Banner Removed - Moved to dedicated /admin/activation page */}
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
@@ -707,7 +617,7 @@ const Chat = () => {
                           await supabase.from('messages').insert({
                             conversation_id: targetConvId,
                             sender_id: currentUserId,
-                            content: `السلام عليكم، أريد تفعيل المحادثة رقم #${conversationId} (مع ${partnerName}) عن طريق الدفع اليدوي (CCP/BaridiMob).`
+                            content: `السلام عليكم، أريد تفعيل المحادثة عن طريق الدفع اليدوي.\n\nرقم المحادثة (ID):\n${conversationId}\n\nيرجى نسخ هذا الرقم وتفعيله من لوحة التحكم.`
                           });
 
                           navigate(`/chat/${targetConvId}`);
@@ -736,20 +646,22 @@ const Chat = () => {
 
 
 
-      {conversationId && (
-        <PaymentModal
-          isOpen={isPaymentModalOpen}
-          onClose={() => setIsPaymentModalOpen(false)}
-          bookingId={conversationId}
-          price={conversationPrice}
-          onPaymentSuccess={() => {
-            // Refresh logic if needed, but PaymentModal usually navigates or we can just reload message
-            // Ideally re-fetch conversation status
-            window.location.reload();
-          }}
-        />
-      )}
-    </div>
+      {
+        conversationId && (
+          <PaymentModal
+            isOpen={isPaymentModalOpen}
+            onClose={() => setIsPaymentModalOpen(false)}
+            bookingId={conversationId}
+            price={conversationPrice}
+            onPaymentSuccess={() => {
+              // Refresh logic if needed, but PaymentModal usually navigates or we can just reload message
+              // Ideally re-fetch conversation status
+              window.location.reload();
+            }}
+          />
+        )
+      }
+    </div >
   );
 };
 
