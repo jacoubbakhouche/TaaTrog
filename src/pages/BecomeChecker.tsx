@@ -37,6 +37,7 @@ const BecomeChecker = () => {
     display_name: "",
     age: "",
     gender: "male",
+    phone: "",
     experience: "",
     languages: [] as string[],
     social_media: {
@@ -139,6 +140,11 @@ const BecomeChecker = () => {
       return;
     }
 
+    if (!formData.phone.trim()) {
+      toast({ title: "الرجاء إدخال رقم الهاتف", variant: "destructive" });
+      return;
+    }
+
     setSubmitting(true);
 
     const { data: { user } } = await supabase.auth.getUser();
@@ -153,6 +159,7 @@ const BecomeChecker = () => {
       display_name: formData.display_name.trim(),
       age: parseInt(formData.age),
       gender: formData.gender,
+      phone: formData.phone.trim(),
       experience: formData.experience.trim(),
       languages: formData.languages,
       social_media: formData.social_media,
@@ -340,6 +347,22 @@ const BecomeChecker = () => {
               className="text-right min-h-[100px]"
               dir="rtl"
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="phone" className="text-right block">رقم الهاتف <span className="text-destructive">*</span></Label>
+            <Input
+              id="phone"
+              type="tel"
+              value={formData.phone}
+              onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+              placeholder="05XXXXXXXX"
+              className="text-right"
+              dir="rtl"
+            />
+            <p className="text-xs text-destructive text-right font-medium">
+              الزامي اضافه رقم الهاتف لي تفعيل حساب
+            </p>
           </div>
         </section>
 

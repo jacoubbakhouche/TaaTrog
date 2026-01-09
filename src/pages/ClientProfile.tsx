@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Camera, ArrowRight, User } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Skeleton } from "@/components/ui/skeleton";
 
 const ClientProfile = () => {
     const navigate = useNavigate();
@@ -136,8 +137,44 @@ const ClientProfile = () => {
 
     if (loading) {
         return (
-            <div className="flex justify-center items-center min-h-screen">
-                <Loader2 className="h-8 w-8 animate-spin" />
+            <div className="min-h-screen bg-background pb-20 fade-in animate-in">
+                {/* Header Skeleton */}
+                <div className="sticky top-0 bg-background/80 backdrop-blur-md z-10 border-b p-4 flex items-center gap-4">
+                    <Skeleton className="h-10 w-10 rounded-lg" />
+                    <Skeleton className="h-8 w-32" />
+                </div>
+
+                <div className="container max-w-md mx-auto p-6 space-y-8">
+                    {/* Avatar Skeleton */}
+                    <div className="flex flex-col items-center gap-4">
+                        <Skeleton className="w-32 h-32 rounded-full" />
+                        <Skeleton className="h-4 w-48" />
+                    </div>
+
+                    {/* Form Skeleton */}
+                    <div className="space-y-6">
+                        <div className="space-y-2">
+                            <Skeleton className="h-4 w-20" />
+                            <Skeleton className="h-12 w-full rounded-md" />
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Skeleton className="h-4 w-16" />
+                                <Skeleton className="h-12 w-full rounded-md" />
+                            </div>
+                            <div className="space-y-2">
+                                <Skeleton className="h-4 w-16" />
+                                <div className="flex gap-2 h-12">
+                                    <Skeleton className="flex-1 h-full rounded-lg" />
+                                    <Skeleton className="flex-1 h-full rounded-lg" />
+                                </div>
+                            </div>
+                        </div>
+
+                        <Skeleton className="h-12 w-full rounded-md mt-4" />
+                    </div>
+                </div>
             </div>
         );
     }
