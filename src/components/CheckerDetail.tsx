@@ -31,6 +31,7 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
   const [loading, setLoading] = useState(false);
   const [fullscreenImage, setFullscreenImage] = useState<string | null>(null);
   const [isReviewModalOpen, setIsReviewModalOpen] = useState(false);
+  const [showAllReviews, setShowAllReviews] = useState(false);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   useEffect(() => {
@@ -374,35 +375,48 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
 
               <div className="space-y-4">
                 {reviews.length > 0 ? (
-                  reviews.map((review, idx) => (
-                    <div key={idx} className="bg-background/60 backdrop-blur-sm p-4 rounded-2xl border border-border/30 relative">
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <div className="w-8 h-8 rounded-full bg-secondary overflow-hidden">
-                            {review.profiles?.avatar_url ? (
-                              <img src={review.profiles.avatar_url} alt="" className="w-full h-full object-cover" />
-                            ) : (
-                              <User className="w-4 h-4 m-2 text-muted-foreground" />
-                            )}
-                          </div>
-                          <div>
-                            <p className="text-xs font-bold">{review.profiles?.full_name || "عميل"}</p>
-                            <div className="flex gap-0.5">
-                              {Array.from({ length: review.rating }).map((_, i) => (
-                                <Star key={i} className="w-3 h-3 fill-yellow-500 text-yellow-500" />
-                              ))}
+                  <>
+                    {reviews.slice(0, showAllReviews ? undefined : 1).map((review, idx) => (
+                      <div key={idx} className="bg-background/60 backdrop-blur-sm p-4 rounded-2xl border border-border/30 relative">
+                        <div className="flex items-start justify-between mb-2">
+                          <div className="flex items-center gap-2">
+                            <div className="w-8 h-8 rounded-full bg-secondary overflow-hidden">
+                              {review.profiles?.avatar_url ? (
+                                <img src={review.profiles.avatar_url} alt="" className="w-full h-full object-cover" />
+                              ) : (
+                                <User className="w-4 h-4 m-2 text-muted-foreground" />
+                              )}
+                            </div>
+                            <div>
+                              <p className="text-xs font-bold">{review.profiles?.full_name || "عميل"}</p>
+                              <div className="flex gap-0.5">
+                                {Array.from({ length: review.rating }).map((_, i) => (
+                                  <Star key={i} className="w-3 h-3 fill-yellow-500 text-yellow-500" />
+                                ))}
+                              </div>
                             </div>
                           </div>
+                          <span className="text-[10px] text-muted-foreground">
+                            {new Date(review.created_at).toLocaleDateString("ar-EG")}
+                          </span>
                         </div>
-                        <span className="text-[10px] text-muted-foreground">
-                          {new Date(review.created_at).toLocaleDateString("ar-EG")}
-                        </span>
+                        <p className="text-foreground text-sm font-medium leading-relaxed italic relative z-10 px-2">
+                          "{review.review_text}"
+                        </p>
                       </div>
-                      <p className="text-foreground text-sm font-medium leading-relaxed italic relative z-10 px-2">
-                        "{review.review_text}"
-                      </p>
-                    </div>
-                  ))
+                    ))}
+
+                    {reviews.length > 1 && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setShowAllReviews(!showAllReviews)}
+                        className="w-full text-xs font-bold text-primary hover:bg-primary/5 mt-2"
+                      >
+                        {showAllReviews ? "عرض أقل" : `عرض كل التقييمات (${reviews.length})`}
+                      </Button>
+                    )}
+                  </>
                 ) : (
                   <p className="text-center text-sm text-muted-foreground py-4">لا توجد تقييمات بعد</p>
                 )}
@@ -468,6 +482,7 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
         isOpen={isReviewModalOpen}
         onClose={() => setIsReviewModalOpen(false)}
         checkerId={checker.id}
+        checkerUserId={checker.user_id}
         onSuccess={() => setRefreshTrigger(prev => prev + 1)}
       />
 

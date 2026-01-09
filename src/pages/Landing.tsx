@@ -78,12 +78,35 @@ const Landing = () => {
                 )}
             </div>
 
+            {/* Background Ambient Glow & Fire Effect */}
+            <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
+                {/* Rising Purple Fire from Bottom */}
+                <div className="absolute bottom-0 left-0 right-0 h-[60%] opacity-80 mix-blend-screen bg-gradient-to-t from-purple-900/60 via-transparent to-transparent">
+                    {/* Core Fire Glow */}
+                    <div className="absolute bottom-[-10%] left-1/2 -translate-x-1/2 w-[80%] h-[60%] bg-purple-600/40 rounded-full blur-[80px] animate-pulse" />
+
+                    {/* Animated Flames */}
+                    <div className="absolute bottom-0 left-1/4 w-20 h-60 bg-purple-500/30 rounded-full blur-[40px] animate-fire-rise delay-0" />
+                    <div className="absolute bottom-0 left-1/2 w-24 h-80 bg-purple-400/20 rounded-full blur-[45px] animate-fire-rise delay-700" />
+                    <div className="absolute bottom-0 right-1/4 w-20 h-50 bg-purple-500/30 rounded-full blur-[40px] animate-fire-rise delay-300" />
+                </div>
+            </div>
+
             {/* 3D Card Stack Container */}
-            <div className="flex-1 relative flex items-center justify-center pt-10">
+            <div className="flex-1 relative flex items-center justify-center pt-10 z-10">
+                <style>{`
+                    @keyframes fire-rise {
+                        0% { transform: translateY(20%) scale(1); opacity: 0.8; }
+                        50% { transform: translateY(-10%) scale(1.1); opacity: 0.6; }
+                        100% { transform: translateY(-30%) scale(0.9); opacity: 0; }
+                    }
+                    .animate-fire-rise {
+                        animation: fire-rise 4s infinite ease-out;
+                    }
+                `}</style>
                 <AnimatePresence custom={direction} mode="popLayout">
                     {screens.slice(currentIndex).map((screen, index) => {
                         const isFirst = index === 0;
-                        const actualIndex = currentIndex + index;
 
                         // Stack styling
                         const yOffset = index * 15; // Vertical stack offset
@@ -103,18 +126,20 @@ const Landing = () => {
                                     y: yOffset,
                                     scale: scale,
                                     opacity: opacity,
-                                    rotate: index % 2 === 0 ? 0 : -2, // Subtle distinct rotation
+                                    rotate: index % 2 === 0 ? 0 : -2,
                                     zIndex: zIndex
                                 }}
                                 exit={{ x: -500, opacity: 0, rotate: -20, transition: { duration: 0.4 } }}
-                                transition={{ type: "spring", stiffness: 200, damping: 25 }}
+                                // Make it smoother: lower stiffness, dragElastic 1 means free movement
+                                transition={{ type: "spring", stiffness: 300, damping: 30, mass: 0.8 }}
                                 drag={isFirst ? "x" : false}
-                                dragConstraints={{ left: 0, right: 0 }}
+                                dragConstraints={{ left: -300, right: 300 }} // Allow more movement range
+                                dragElastic={0.7} // Feel rubbery but loose
                                 onDragEnd={handleDragEnd}
-                                className={`absolute top-[15%] w-[85%] h-[60vh] rounded-[2.5rem] overflow-hidden shadow-2xl ${isFirst ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                                className={`absolute top-[15%] w-[85%] h-[60vh] rounded-[2.5rem] overflow-hidden ${isFirst ? 'cursor-grab active:cursor-grabbing' : ''} ${index === 0 ? 'fire-glow' : ''}`}
                                 style={{ transformOrigin: "bottom center" }}
                             >
-                                <div className="absolute inset-0 bg-gray-900 border border-white/10">
+                                <div className="absolute inset-0 bg-gray-900 border border-white/10 shadow-2xl">
                                     <img src={screen.img} alt="" className="w-full h-full object-cover" />
                                     <div className="absolute inset-0 bg-gradient-to-t from-black via-black/20 to-transparent opacity-90" />
 

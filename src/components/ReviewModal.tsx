@@ -11,10 +11,11 @@ interface ReviewModalProps {
     isOpen: boolean;
     onClose: () => void;
     checkerId: string;
+    checkerUserId: string;
     onSuccess?: () => void;
 }
 
-export function ReviewModal({ isOpen, onClose, checkerId, onSuccess }: ReviewModalProps) {
+export function ReviewModal({ isOpen, onClose, checkerId, checkerUserId, onSuccess }: ReviewModalProps) {
     const [rating, setRating] = useState(0);
     const [hoveredRating, setHoveredRating] = useState(0);
     const [comment, setComment] = useState("");
@@ -29,7 +30,16 @@ export function ReviewModal({ isOpen, onClose, checkerId, onSuccess }: ReviewMod
         setSubmitting(true);
         try {
             const { data: { user } } = await supabase.auth.getUser();
-            if (!user) return;
+            if (!user) {
+                toast.error("يجب عليك تسجيل الدخول أولاً");
+                return;
+            }
+
+            if (user.id === checkerUserId) {
+                toast.error("لا يمكنك تقييم نفسك!");
+                setSubmitting(false);
+                return;
+            }
 
             const { error } = await supabase
                 .from("reviews")
@@ -40,14 +50,19 @@ export function ReviewModal({ isOpen, onClose, checkerId, onSuccess }: ReviewMod
                     review_text: comment,
                 });
 
-            if (error) throw error;
+            if (error) {
+                if (error.code === "23505") {
+                    throw new Error("لقد قمت بتقييم هذا المتحقق مسبقاً.");
+                }
+                throw error;
+            }
 
             toast.success("تم إرسال تقييمك بنجاح! شكراً لك.");
             if (onSuccess) onSuccess();
             onClose();
-        } catch (error) {
+        } catch (error: any) {
             console.error("Error submitting review:", error);
-            toast.error("حدث خطأ أثناء إرسال التقييم");
+            toast.error(error.message || "حدث خطأ أثناء إرسال التقييم");
         } finally {
             setSubmitting(false);
         }
