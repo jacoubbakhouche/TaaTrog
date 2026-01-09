@@ -67,6 +67,7 @@ const Chat = () => {
   const [sending, setSending] = useState(false);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
+  const [clientUserId, setClientUserId] = useState<string | null>(null);
   const [partnerName, setPartnerName] = useState("");
   const [partnerAvatar, setPartnerAvatar] = useState<string | null>(null);
 
@@ -102,6 +103,10 @@ const Chat = () => {
         .select("id, user_id, checker_id, status, price")
         .eq("id", conversationId)
         .maybeSingle();
+
+      if (conv) {
+        setClientUserId(conv.user_id);
+      }
 
       if (convError || !conv) {
         console.error("Error fetching conversation:", convError);
@@ -422,31 +427,42 @@ const Chat = () => {
               try {
                 toast({ title: "جاري التفعيل...", description: "لحظات من فضلك" });
 
-                // 1. Update Conversation Directly
-                const { error: convError } = await supabase
-                  .from('conversations')
-                  .update({ status: 'paid' } as any)
-                  .eq('id', conversationId);
-
-                if (convError) throw convError;
-
-                // 2. Best Effort: Update any related Request
-                await supabase
+                // 1. Find the Target Conversation from Request
+                if (!clientUserId) {
+                  toast({ title: "خطأ", description: "بيانات العميل غير متوفرة", variant: "destructive" });
+                  return;
+                }
+                const { data: targetReq, error: findError } = await supabase
                   .from('activation_requests')
-                  .update({ status: 'approved' } as any)
-                  .eq('conversation_id', conversationId);
+                  .select('id, conversation_id')
+                  .eq('user_id', clientUserId) // Use stored client ID
+                  .eq('status', 'pending')
+                  .order('created_at', { ascending: false })
+                  .maybeSingle();
+
+                if (findError || !targetReq) {
+                  toast({ title: "خطأ", description: "لم يتم العثور على طلب التفعيل المرتبط.", variant: "destructive" });
+                  return;
+                }
+
+                // 2. Activate via Secure RPC
+                const { error: rpcError } = await supabase.rpc('admin_activate_conversation', {
+                  target_conversation_id: targetReq.conversation_id
+                });
+
+                if (rpcError) throw rpcError;
 
                 // 3. Notify User in Chat
                 await supabase.from("messages").insert({
                   conversation_id: conversationId,
                   sender_id: currentUserId,
-                  content: `✅ تم تفعيل المحادثة (#${conversationId?.substring(0, 6)}) بنجاح! يمكنك الآن العودة لتلك المحادثة.`
+                  content: `✅ تم تفعيل المحادثة رقم #${targetReq.conversation_id.substring(0, 6)} بنجاح! يمكنك الآن العودة لتلك المحادثة.`
                 });
 
-                setConversationStatus('paid'); // Update local state to hide banner instantly
-                toast({ title: "تم التفعيل بنجاح! 🎉", description: "تم تحديث حالة العميل." });
+                setConversationStatus('paid'); // Update local state
+                toast({ title: "تم التفعيل بنجاح! 🎉", description: "تم تفعيل خدمة العميل." });
 
-                // Optional: Reload after short delay to sync everything
+                // Optional: Reload
                 setTimeout(() => window.location.reload(), 1500);
 
               } catch (e) {

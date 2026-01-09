@@ -111,7 +111,21 @@ const Messages = () => {
         })
       );
 
-      setConversations(conversationsWithMessages as any);
+      // VISIBILITY LOGIC:
+      // Checkers (who are not the client in the convo) should ONLY see 'paid', 'approved', 'active', 'completed'.
+      // Clients see everything.
+      const finalConversations = conversationsWithMessages.filter((conv: any) => {
+        const isImClient = conv.user_id === user.id;
+
+        if (isImClient) return true; // Clients always see their chats (unless deleted, which is handled by query)
+
+        // I am the Checker
+        // Check status
+        const visibleStatuses = ['paid', 'approved', 'active', 'completed'];
+        return visibleStatuses.includes(conv.status || '');
+      });
+
+      setConversations(finalConversations as Conversation[]);
       setLoading(false);
     };
 
@@ -160,7 +174,6 @@ const Messages = () => {
 
   return (
     <div className="min-h-screen bg-background pb-20">
-      {/* Header */}
       <div className="sticky top-0 z-10 bg-card border-b border-border px-4 py-4">
         <h1 className="text-xl font-bold text-foreground">الرسائل</h1>
       </div>
@@ -177,11 +190,12 @@ const Messages = () => {
             </p>
           </div>
         ) : (
-          conversations.map((conv: any) => {
+          conversations.map((conv) => {
             const isImChecker = conv.checkers?.user_id === currentUserId;
             const partnerName = isImChecker
               ? (conv.profiles?.full_name || "عميل")
-              : conv.checkers?.display_name;
+              : (conv.checkers?.display_name || "مستخدم");
+
             const partnerAvatar = isImChecker
               ? conv.profiles?.avatar_url
               : conv.checkers?.avatar_url;
@@ -238,23 +252,13 @@ const Messages = () => {
                     if (!window.confirm("هل أنت متأكد من حذف هذه المحادثة؟")) return;
 
                     const isImUser = conv.user_id === currentUserId;
-                    // If I am NOT the user, I must be the checker (since I see this chat)
-                    // But confirm checker_id matches just in case? Or just assume else.
-                    // conv.checkers.user_id is me?
-                    // Let's use the safe derivation:
-                    // We know `currentUserId`.
-                    // We know `conv.user_id` and `conv.checkers.user_id`.
 
                     try {
                       let shouldHardDelete = false;
 
                       if (isImUser) {
-                        // I am the Client
-                        // If Checker already deleted, then Hard Delete
                         if (conv.deleted_for_checker) shouldHardDelete = true;
                       } else {
-                        // I am the Checker
-                        // If Client already deleted, then Hard Delete
                         if (conv.deleted_for_user) shouldHardDelete = true;
                       }
 
@@ -262,7 +266,6 @@ const Messages = () => {
                         const { error } = await supabase.from("conversations").delete().eq("id", conv.id);
                         if (error) throw error;
                       } else {
-                        // Soft Delete
                         const updateData = isImUser
                           ? { deleted_for_user: true, cleared_at_for_user: new Date().toISOString() }
                           : { deleted_for_checker: true, cleared_at_for_checker: new Date().toISOString() };
@@ -274,7 +277,7 @@ const Messages = () => {
                       setConversations(conversations.filter((c) => c.id !== conv.id));
                     } catch (err) {
                       console.error("Error deleting conversation:", err);
-                      alert("فشلت عملية الحذف");
+                      // alert("فشلت عملية الحذف"); 
                     }
                   }}
                   className="p-2 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-full transition-colors opacity-0 group-hover:opacity-100 focus:opacity-100"
@@ -292,5 +295,6 @@ const Messages = () => {
     </div>
   );
 };
+
 
 export default Messages;
