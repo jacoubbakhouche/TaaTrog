@@ -1,22 +1,18 @@
-import { useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, ShieldCheck, HeartHandshake, Lock, Play } from "lucide-react"; // Added Play icon
+import { ArrowLeft, Shield, Clock } from "lucide-react"; // Removed generic imports
 import { supabase } from "@/integrations/supabase/client";
-import { Footer } from "@/components/Footer";
+import { motion, AnimatePresence } from "framer-motion";
 
-// Dummy video data for carousel
-const TIKTOK_VIDEOS = [
-    "https://images.unsplash.com/photo-1516035069371-29a1b244cc32?w=400&h=700&fit=crop", // Couple 1
-    "https://images.unsplash.com/photo-1621600411688-4be93cd68504?w=400&h=700&fit=crop", // Couple 2
-    "https://images.unsplash.com/photo-1511895426328-dc8714191300?w=400&h=700&fit=crop", // Couple 3
-    "https://images.unsplash.com/photo-1529333166437-7750a6dd5a70?w=400&h=700&fit=crop", // Couple 4
-    "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=400&h=700&fit=crop", // Portrait
-    "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=400&h=700&fit=crop", // Portrait
-];
+// Assets
+const HERO_3D = "/hero-couple.png";
+const FEATURES_3D = "/hero-woman.png";
+const AVATARS_3D = "/hero-group.png";
 
 const Landing = () => {
     const navigate = useNavigate();
+    const [currentScreen, setCurrentScreen] = useState(0);
 
     useEffect(() => {
         supabase.auth.getSession().then(({ data: { session } }) => {
@@ -24,159 +20,158 @@ const Landing = () => {
                 navigate("/explore");
             }
         });
-
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-            if (session) {
-                navigate("/explore");
-            }
-        });
-
-        return () => subscription.unsubscribe();
     }, [navigate]);
 
+    const nextScreen = () => {
+        if (currentScreen < 2) setCurrentScreen(prev => prev + 1);
+        else navigate('/auth');
+    };
+
+    const skip = () => navigate('/auth');
+
+    // Variants for slide animation (Clean Fade/Slide)
+    const slideVariants = {
+        enter: (direction: number) => ({
+            x: direction > 0 ? '100%' : '-100%',
+            opacity: 0,
+        }),
+        center: {
+            zIndex: 1,
+            x: 0,
+            opacity: 1,
+        },
+        exit: (direction: number) => ({
+            zIndex: 0,
+            x: direction < 0 ? '100%' : '-100%',
+            opacity: 0,
+        })
+    };
+
+    // Text Content Data
+    const screens = [
+        {
+            id: 0,
+            img: HERO_3D,
+            title: <>اكتشفي <span className="text-purple-400">الحقيقة</span><br />بكل سهولة</>,
+            desc: "توصلي مع محترفين (Checkers) للتحقق من ولاء شريكك بسرية تامة وأمان.",
+            bg: "bg-black" // Fallback color
+        },
+        {
+            id: 1,
+            img: FEATURES_3D,
+            title: <>تحكم كامل <br /><span className="text-pink-400">في العملية</span></>,
+            desc: "تابعي حالة طلبك لحظة بلحظة، واحصلي على أدلة موثقة (صور ومحادثات).",
+            bg: "bg-black"
+        },
+        {
+            id: 2,
+            img: AVATARS_3D,
+            title: <>انضمي لمجتمعنا</>,
+            desc: "أكثر من 10,000+ مستخدمة يثقون بنا. ابدأي رحلتك نحو راحة البال اليوم.",
+            bg: "bg-black"
+        }
+    ];
+
     return (
-        <div className="relative overflow-hidden w-full bg-background min-h-screen flex flex-col pt-8 pb-16 md:pt-16 md:pb-32" dir="rtl">
-            {/* 3D Animated Mesh Gradient Background */}
-            <div className="absolute inset-0 w-full h-full overflow-hidden z-0">
-                <div className="absolute top-[-20%] left-[-10%] w-[70vw] h-[70vw] bg-purple-600/30 rounded-full mix-blend-multiply filter blur-[100px] opacity-70 animate-blob"></div>
-                <div className="absolute top-[-20%] right-[-10%] w-[70vw] h-[70vw] bg-primary/30 rounded-full mix-blend-multiply filter blur-[100px] opacity-70 animate-blob animation-delay-2000"></div>
-                <div className="absolute bottom-[-20%] left-[20%] w-[70vw] h-[70vw] bg-pink-600/30 rounded-full mix-blend-multiply filter blur-[100px] opacity-70 animate-blob animation-delay-4000"></div>
-            </div>
+        <div className="min-h-screen w-full bg-black font-['Outfit',_sans-serif] overflow-hidden relative" dir="rtl">
 
-            <div className="container px-4 mx-auto relative z-10 flex-grow flex flex-col justify-center">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center mb-24">
+            <AnimatePresence initial={false} custom={currentScreen}>
+                <motion.div
+                    key={currentScreen}
+                    custom={currentScreen}
+                    variants={slideVariants}
+                    initial="enter"
+                    animate="center"
+                    exit="exit"
+                    transition={{ type: "spring", stiffness: 300, damping: 30 }}
+                    className="absolute inset-0 w-full h-full"
+                >
+                    {/* Background Image Container - FULL SCREEN */}
+                    <div className="absolute inset-0 w-full h-full">
+                        {/* Image */}
+                        <img
+                            src={screens[currentScreen].img}
+                            alt={`Screen ${currentScreen}`}
+                            className="w-full h-full object-cover object-center"
+                        />
 
-                    {/* Right Column: Text Content */}
-                    <div className="text-right space-y-8 animate-fade-in-right z-20">
-                        {/* Badge */}
-                        <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 backdrop-blur-md border border-white/20 shadow-lg">
-                            <ShieldCheck className="w-5 h-5 text-primary" />
-                            <span className="text-sm font-bold text-foreground tracking-wide">المنصة الأولى لكشف الحقيقة</span>
-                        </div>
-
-                        {/* Main Headline */}
-                        <h1 className="text-5xl md:text-7xl font-extrabold tracking-tight text-foreground leading-[1.1] drop-shadow-sm">
-                            اكتشفي <span className="text-transparent bg-clip-text bg-gradient-to-r from-primary via-purple-500 to-pink-500 animate-gradient-x">الحقيقة</span>
-                            <br />
-                            خلف الشكوك
-                        </h1>
-
-                        {/* Subheadline */}
-                        <p className="text-lg md:text-2xl text-muted-foreground/90 max-w-xl leading-relaxed font-light">
-                            هل تشعرك تصرفاته بالقلق؟ استخدمي "رابط الثقة" للتأكد بذكاء وسرية تامة. نحن هنا لنمنحك اليقين الذي تستحقينه.
-                        </p>
-
-                        {/* CTA Buttons */}
-                        <div className="flex flex-col sm:flex-row items-center justify-start gap-5 pt-4">
-                            <Button
-                                size="lg"
-                                onClick={() => navigate("/auth")}
-                                className="w-full sm:w-auto text-xl h-16 px-12 rounded-full bg-primary hover:bg-primary/90 transition-all hover:scale-105 shadow-[0_0_30px_-10px_rgba(236,72,153,0.6)] border-0"
-                            >
-                                ابدأي التحقق الآن
-                                <ArrowLeft className="w-6 h-6 mr-3" />
-                            </Button>
-                            <Button
-                                variant="outline"
-                                size="lg"
-                                onClick={() => navigate("/become-checker")}
-                                className="w-full sm:w-auto text-lg h-16 px-10 rounded-full border-2 border-primary/20 hover:border-primary/50 hover:bg-white/5 backdrop-blur-sm transition-all"
-                            >
-                                انضمي كمتحققة
-                            </Button>
-                        </div>
+                        {/* Gradient Overlay for Text Readability - Heavily faded at black */}
+                        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-transparent opacity-90" />
                     </div>
 
-                    {/* Left Column: Visual Mockup (Couple Image) */}
-                    <div className="relative animate-fade-in-left mt-12 lg:mt-0 perspective-1000 group">
-                        {/* Decorative floating elements */}
-                        <div className="absolute -top-20 -right-20 w-64 h-64 bg-gradient-to-br from-purple-500/20 to-transparent rounded-full blur-3xl" />
+                    {/* Content Overlay */}
+                    <div className="absolute inset-0 flex flex-col justify-end pb-32 px-8 z-10">
+                        <motion.div
+                            initial={{ y: 20, opacity: 0 }}
+                            animate={{ y: 0, opacity: 1 }}
+                            transition={{ delay: 0.2 }}
+                            className="text-center space-y-4 max-w-lg mx-auto"
+                        >
+                            <h1 className="text-4xl md:text-5xl font-black text-white leading-tight drop-shadow-lg">
+                                {screens[currentScreen].title}
+                            </h1>
+                            <p className="text-gray-300 text-lg md:text-xl font-light leading-relaxed">
+                                {screens[currentScreen].desc}
+                            </p>
 
-                        {/* Main Image with 3D Tilt Effect */}
-                        <div className="relative z-10 w-full max-w-md mx-auto transform transition-transform duration-500 group-hover:rotate-y-6 group-hover:rotate-x-6">
-                            <div className="relative rounded-[3rem] overflow-hidden shadow-2xl border-[10px] border-white/20 backdrop-blur-md">
-                                <img
-                                    src="https://images.unsplash.com/photo-1517841905240-472988babdf9?q=80&w=2459&auto=format&fit=crop"
-                                    alt="Couple in Love"
-                                    className="w-full h-[600px] object-cover hover:scale-110 transition-transform duration-700"
-                                />
-                                {/* Overlay Gradient */}
-                                <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none" />
-
-                                {/* Floating Card inside image */}
-                                <div className="absolute bottom-8 left-8 right-8 bg-white/10 backdrop-blur-xl p-6 rounded-3xl border border-white/20 shadow-lg translate-y-4 group-hover:translate-y-0 transition-transform duration-500">
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-12 h-12 rounded-full bg-green-500 flex items-center justify-center shadow-inner">
-                                            <ShieldCheck className="w-6 h-6 text-white" />
-                                        </div>
-                                        <div>
-                                            <p className="text-white font-bold text-lg">نتائج مضمونة</p>
-                                            <p className="text-white/70 text-sm">سرية تامة 100%</p>
-                                        </div>
-                                    </div>
+                            {/* CTA on Last Screen */}
+                            {currentScreen === 2 && (
+                                <div className="pt-6 w-full flex flex-col gap-3">
+                                    <Button
+                                        onClick={() => navigate('/auth')}
+                                        className="w-full h-14 bg-white text-black hover:bg-white/90 rounded-full text-lg font-bold shadow-[0_0_20px_rgba(255,255,255,0.3)] transition-transform hover:scale-105"
+                                    >
+                                        ابدأي الآن
+                                    </Button>
+                                    <Button
+                                        onClick={() => navigate('/become-checker')}
+                                        variant="outline"
+                                        className="w-full h-14 border-white/30 text-white hover:bg-white/10 rounded-full text-lg bg-transparent"
+                                    >
+                                        انضمي كمتحققة
+                                    </Button>
                                 </div>
-                            </div>
-                        </div>
+                            )}
+                        </motion.div>
                     </div>
-                </div>
+                </motion.div>
+            </AnimatePresence>
 
-                {/* TikTok Style Carousel Section */}
-                <div className="w-full py-12 overflow-hidden">
-                    <h2 className="text-3xl font-bold text-center mb-10">من تجارب مستخدمينا</h2>
+            {/* --- Sticky Bottom Navigation (Dots & Next) --- */}
+            <div className="absolute bottom-0 left-0 right-0 p-8 pt-0 z-20 flex items-end justify-between">
 
-                    {/* Marquee Container */}
-                    <div className="flex gap-6 animate-marquee hover:pause whitespace-nowrap">
-                        {[...TIKTOK_VIDEOS, ...TIKTOK_VIDEOS].map((video, idx) => (
-                            <div
-                                key={idx}
-                                className="inline-block w-[200px] md:w-[250px] aspect-[9/16] rounded-3xl overflow-hidden relative shadow-xl border-4 border-white/10 cursor-pointer hover:scale-105 transition-transform group shrink-0"
-                            >
-                                <img src={video} alt="Story" className="w-full h-full object-cover" />
-                                <div className="absolute inset-0 bg-black/20 group-hover:bg-black/40 transition-colors flex items-center justify-center">
-                                    <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-md flex items-center justify-center border border-white/50">
-                                        <Play className="w-5 h-5 text-white fill-current" />
-                                    </div>
-                                </div>
-                                <div className="absolute bottom-4 right-4 flex gap-2">
-                                    <div className="px-2 py-1 bg-black/50 backdrop-blur-md rounded-full text-white text-xs font-medium">
-                                        @user_{100 + idx}
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-
-                {/* Features Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-16">
-                    {[
-                        {
-                            icon: ShieldCheck,
-                            title: "خصوصية تامة",
-                            desc: "نحافظ على سرية هويتك ومحادثاتك بأعلى معايير التشفير."
-                        },
-                        {
-                            icon: HeartHandshake,
-                            title: "مصداقية عالية",
-                            desc: "نضمن لك نتائج حقيقية وموثقة من خلال شبكة متحققين محترفين."
-                        },
-                        {
-                            icon: Lock,
-                            title: "دفع آمن",
-                            desc: "لا يتم تسليم المبلغ للمتحقق إلا بعد إتمام المهمة بنجاح."
-                        }
-                    ].map((feature, i) => (
-                        <div key={i} className="p-8 rounded-[2rem] bg-white/5 backdrop-blur-lg border border-white/10 hover:bg-white/10 transition-all hover:-translate-y-2 group">
-                            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary to-purple-600 flex items-center justify-center mb-6 shadow-lg shadow-primary/20">
-                                <feature.icon className="w-8 h-8 text-white" />
-                            </div>
-                            <h3 className="text-xl font-bold mb-3">{feature.title}</h3>
-                            <p className="text-muted-foreground leading-relaxed">{feature.desc}</p>
-                        </div>
+                {/* Dots Indicator */}
+                <div className="flex gap-2 mb-4">
+                    {[0, 1, 2].map((idx) => (
+                        <div
+                            key={idx}
+                            className={`h-2 rounded-full transition-all duration-300 ${idx === currentScreen ? 'w-8 bg-purple-500' : 'w-2 bg-gray-500/50'
+                                }`}
+                        />
                     ))}
                 </div>
+
+                {/* Next Button (Only on first 2 screens) */}
+                {currentScreen < 2 ? (
+                    <div className="flex items-center gap-6 pb-2">
+                        <button
+                            onClick={skip}
+                            className="text-sm font-medium text-gray-400 hover:text-white transition-colors"
+                        >
+                            تخطي
+                        </button>
+                        <Button
+                            onClick={nextScreen}
+                            size="icon"
+                            className="w-16 h-16 rounded-full bg-purple-600 hover:bg-purple-500 text-white shadow-[0_0_30px_rgba(168,85,247,0.5)] border-4 border-black/20"
+                        >
+                            <ArrowLeft className="w-8 h-8" />
+                        </Button>
+                    </div>
+                ) : null}
+
             </div>
-            <Footer />
+
         </div>
     );
 };
