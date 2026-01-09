@@ -484,7 +484,7 @@ const Chat = () => {
             </Button>
           </div>
         ) : conversationStatus === 'approved' ? (
-          // UNLOCKED STATE: Show "Start Chat" Button for User/Tester
+          // UNLOCKED STATE (Legacy or specific flow): Show "Start Chat" Button for User/Tester
           <div className="p-4 bg-green-50/50 border border-green-200 rounded-xl text-center space-y-3">
             <h3 className="text-green-800 font-bold">🎉 تمت الموافقة على الطلب!</h3>
             <p className="text-xs text-green-600">اضغط على الزر أدناه للدخول إلى الدردشة وإرسال الرسائل.</p>
@@ -511,130 +511,62 @@ const Chat = () => {
         ) : (
           <div className="p-4 rounded-xl bg-secondary/50 border border-border text-center">
             {isImChecker ? (
-              // Checker/Admin View of Locked Chat
-              currentUserEmail === ADMIN_EMAIL ? (
+              // Checker View of Locked Chat
+              conversationStatus === "pending_approval" ? (
                 <div className="space-y-4">
-                  <p className="font-bold text-muted-foreground">محادثة مغلقة 🔒</p>
-                  <Button
-                    onClick={async () => {
-                      // Admin Override
-                      await supabase.from('conversations').update({ status: 'approved' } as any).eq('id', conversationId);
-                      setConversationStatus('approved');
-                    }}
-                    className="w-full bg-gray-800 text-white"
-                  >
-                    فك القفل (Admin Override)
-                  </Button>
+                  <div className="space-y-1">
+                    <p className="font-bold text-base">لديك طلب جديد! 🔔</p>
+                    <p className="text-sm text-muted-foreground">يرغب العميل في بدء اختبار ولاء. هل تقبل؟</p>
+                  </div>
+                  <div className="flex gap-3">
+                    <Button
+                      onClick={async () => {
+                        // Checker Accepts -> Sets status to 'paid' (Active)
+                        try {
+                          const { error } = await supabase
+                            .from('conversations')
+                            .update({ status: 'paid' } as any)
+                            .eq('id', conversationId);
+
+                          if (error) throw error;
+                          setConversationStatus('paid');
+                          toast({ title: "تم قبول الطلب", description: "يمكنك الآن التحدث مع العميل." });
+                        } catch (e) {
+                          toast({ title: "خطأ", description: "فشل قبول الطلب", variant: "destructive" });
+                        }
+                      }}
+                      className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold"
+                    >
+                      قبول الطلب ✅
+                    </Button>
+                    <Button
+                      variant="outline"
+                      className="flex-1 text-red-500 border-red-200 hover:bg-red-50"
+                      onClick={async () => {
+                        // Reject logic if needed
+                        await supabase.from('conversations').update({ status: 'rejected' } as any).eq('id', conversationId);
+                        setConversationStatus('rejected');
+                        navigate('/messages');
+                      }}
+                    >
+                      رفض
+                    </Button>
+                  </div>
                 </div>
               ) : (
-                // Regular Checker in Locked Chat
-                <p className="text-sm text-muted-foreground">بانتظار تفعيل الإدارة... ⏳</p>
+                <p className="text-sm text-muted-foreground">هذه المحادثة مغلقة ({conversationStatus})</p>
               )
             ) : (
               // Client View of Locked Chat
               conversationStatus === "pending_approval" ? (
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <p className="font-bold text-muted-foreground">بانتظار إتمام الدفع 🔒</p>
-                    <p className="text-xs text-muted-foreground">اختر وسيلة الدفع للمتابعة</p>
+                <div className="space-y-3 py-2">
+                  <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-2 animate-pulse">
+                    <Shield className="w-6 h-6 text-primary" />
                   </div>
-
-                  <div className="grid grid-cols-1 gap-2">
-                    <Button
-                      onClick={async () => {
-                        try {
-                          toast({ title: "جاري فتح قناة دفع...", description: "يتم تحويلك إلى المشرف..." });
-
-                          // 1. Get Admin ID
-                          const { data: adminUserId, error: rpcError } = await supabase.rpc('get_support_admin_id');
-
-                          if (rpcError || !adminUserId) {
-                            console.error("RPC Error:", rpcError);
-                            toast({ title: "خطأ", description: "تعذر الاتصال بالمشرف", variant: "destructive" });
-                            return;
-                          }
-
-                          // 2. Get Admin Checker Profile
-                          const { data: adminChecker, error: checkerError } = await supabase
-                            .from('checkers')
-                            .select('id')
-                            .eq('user_id', adminUserId)
-                            .maybeSingle();
-
-                          if (checkerError || !adminChecker) {
-                            toast({ title: "خطأ", description: "حساب المشرف غير مهيأ", variant: "destructive" });
-                            return;
-                          }
-
-                          // 3. Create or Get Support Conversation
-                          // Check if one already exists for payment negotiation? Or just general support?
-                          // Let's create a *new* one or reuse support thread.
-                          // Ideally, we want a thread specific to this issue, but single support thread is cleaner.
-                          // Let's use single support thread (User <-> Admin).
-
-                          const { data: existingConv } = await supabase
-                            .from('conversations')
-                            .select('id')
-                            .eq('user_id', currentUserId)
-                            .eq('checker_id', adminChecker.id)
-                            .maybeSingle(); // payment_negotiation or payment_pending status? No, just any conv.
-
-                          let targetConvId = existingConv?.id;
-
-                          if (!targetConvId) {
-                            const { data: newConv, error: createError } = await supabase
-                              .from('conversations')
-                              .insert({
-                                user_id: currentUserId,
-                                checker_id: adminChecker.id,
-                                status: 'payment_negotiation',
-                                price: 0
-                              } as any)
-                              .select()
-                              .single();
-
-                            if (createError) throw createError;
-                            targetConvId = newConv.id;
-                          }
-
-                          // 4. Create Activation Request (So Admin sees it in Dashboard)
-                          const { data: currentConv } = await supabase
-                            .from('conversations')
-                            .select('checker_id')
-                            .eq('id', conversationId)
-                            .single();
-
-                          if (currentConv) {
-                            await supabase.from('activation_requests').insert({
-                              user_id: currentUserId,
-                              conversation_id: conversationId,
-                              checker_id: currentConv.checker_id, // The checker of the locked chat
-                              status: 'pending'
-                            });
-                          }
-
-                          // 5. Send Context Message
-                          await supabase.from('messages').insert({
-                            conversation_id: targetConvId,
-                            sender_id: currentUserId,
-                            content: `السلام عليكم، أريد تفعيل المحادثة عن طريق الدفع اليدوي.\n\nرقم المحادثة (ID):\n${conversationId}\n\nيرجى نسخ هذا الرقم وتفعيله من لوحة التحكم.`
-                          });
-
-                          navigate(`/chat/${targetConvId}`);
-
-                        } catch (e) {
-                          console.error(e);
-                          toast({ title: "خطأ", description: "حدث خطأ غير متوقع", variant: "destructive" });
-                        }
-                      }}
-                      className="w-full bg-primary hover:bg-primary/90 text-primary-foreground h-auto py-3 rounded-xl shadow-lg hover:shadow-primary/20 transition-all"
-                    >
-                      <div className="flex items-center justify-center gap-2">
-                        <span className="font-bold text-lg">الدفع اليدوي (CCP / BaridiMob)</span>
-                      </div>
-                      <p className="text-xs opacity-90 mt-1 font-normal">تحدث مباشرة مع الإدارة لتفعيل الخدمة</p>
-                    </Button>
-                  </div>
+                  <h3 className="font-bold text-foreground">بانتظار قبول المتحقق... ⏳</h3>
+                  <p className="text-xs text-muted-foreground max-w-xs mx-auto">
+                    تم إرسال طلبك إلى المتحقق. سيصلك إشعار فور قبوله للبدء في الدردشة.
+                  </p>
                 </div>
               ) : (
                 <p className="text-sm text-muted-foreground">هذه المحادثة مغلقة ({conversationStatus})</p>

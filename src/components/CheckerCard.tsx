@@ -8,7 +8,7 @@ interface CheckerCardProps {
 
 const CheckerCard = ({ checker, onClick }: CheckerCardProps) => {
   return (
-    <div 
+    <div
       onClick={onClick}
       className="relative rounded-2xl overflow-hidden bg-card shadow-card hover:shadow-card-hover transition-all duration-300 cursor-pointer group"
     >
@@ -25,7 +25,7 @@ const CheckerCard = ({ checker, onClick }: CheckerCardProps) => {
             <User className="w-16 h-16 text-muted-foreground" />
           </div>
         )}
-        
+
         {/* Online Indicator */}
         {checker.is_online && (
           <div className="absolute top-3 right-3 w-3 h-3 bg-online rounded-full border-2 border-card animate-pulse-online shadow-lg" />
@@ -41,9 +41,9 @@ const CheckerCard = ({ checker, onClick }: CheckerCardProps) => {
             <span className="text-white/90 text-sm font-medium">{checker.age || "?"} y/o</span>
             <BadgeCheck className="w-4 h-4 text-primary fill-white" />
           </div>
-          
+
           {/* Tests Badge */}
-          <div className="absolute bottom-3 right-3 bg-white/95 backdrop-blur-sm rounded-full px-2 py-1 text-xs font-semibold text-foreground shadow-sm">
+          <div className="absolute bottom-3 right-3 bg-white/90 dark:bg-black/60 backdrop-blur-md rounded-full px-2.5 py-1 text-xs font-semibold text-black dark:text-white shadow-sm border border-black/5 dark:border-white/10">
             +{checker.tests_count || 0} tests
           </div>
         </div>
