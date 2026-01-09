@@ -35,16 +35,30 @@ interface SidebarProps {
 
 const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
   const [user, setUser] = useState<SupabaseUser | null>(null);
+  const [profile, setProfile] = useState<{ full_name: string | null; avatar_url: string | null } | null>(null);
   const [isChecker, setIsChecker] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
   useEffect(() => {
+    const fetchProfile = async (userId: string) => {
+      const { data } = await supabase
+        .from("profiles")
+        .select("full_name, avatar_url")
+        .eq("user_id", userId)
+        .single();
+      setProfile(data);
+      checkIfChecker(userId);
+    };
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         setUser(session?.user ?? null);
         if (session?.user) {
-          checkIfChecker(session.user.id);
+          fetchProfile(session.user.id);
+        } else {
+          setProfile(null);
+          setIsChecker(false);
         }
       }
     );
@@ -52,7 +66,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
       if (session?.user) {
-        checkIfChecker(session.user.id);
+        fetchProfile(session.user.id);
       }
     });
 
@@ -132,11 +146,25 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
 
         {/* User Info */}
         {user && (
-          <div className="px-6 py-4 border-b border-sidebar-border">
-            <p className="text-sidebar-foreground text-sm">مرحباً</p>
-            <p className="text-sidebar-foreground font-semibold truncate">{user.email}</p>
+          <div className="px-6 py-4 border-b border-sidebar-border flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full overflow-hidden bg-secondary border border-border">
+              {profile?.avatar_url ? (
+                <img src={profile.avatar_url} alt="User" className="w-full h-full object-cover" />
+              ) : (
+                <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                  <User className="w-5 h-5" />
+                </div>
+              )}
+            </div>
+            <div>
+              <p className="text-sidebar-foreground text-sm font-semibold truncate">
+                {profile?.full_name || "مستخدم"}
+              </p>
+              <p className="text-muted-foreground text-xs truncate max-w-[150px]">{user.email}</p>
+            </div>
+
             {isAdmin && (
-              <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded mt-1 inline-block">
+              <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded ml-auto">
                 مشرف
               </span>
             )}
@@ -180,9 +208,9 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
                 navigate("/become-checker");
                 onClose();
               }}
-              className="w-full flex items-center gap-4 px-6 py-3.5 text-primary hover:bg-sidebar-accent transition-colors text-left"
+              className="w-full flex items-center gap-4 px-6 py-3.5 text-sidebar-foreground font-bold hover:bg-sidebar-accent transition-colors text-left"
             >
-              <UserPlus className="w-5 h-5" />
+              <UserPlus className="w-5 h-5 text-sidebar-foreground" />
               <span className="font-medium">الترقية إلى متحقق</span>
               <span className="ml-auto bg-primary text-primary-foreground text-[10px] px-1.5 py-0.5 rounded font-bold">
                 NEW

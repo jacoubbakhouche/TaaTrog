@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
-import { Eye, EyeOff, ArrowLeft, Mail, Lock } from "lucide-react";
+import { Eye, EyeOff, ArrowLeft, Mail, Lock, User } from "lucide-react";
 import SignupSteps from "@/components/auth/SignupSteps";
 
 const ADMIN_EMAIL = "yakoubbakhouche011@gmail.com";
@@ -14,6 +14,7 @@ const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showSignupSteps, setShowSignupSteps] = useState(false);
@@ -22,28 +23,40 @@ const Auth = () => {
   const { toast } = useToast();
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        if (session?.user) {
-          // Redirect admin to admin page, others to home
-          if (session.user.email === ADMIN_EMAIL) {
-            navigate("/admin");
-          } else {
-            navigate("/explore");
-          }
-        }
-      }
-    );
+    const checkUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         if (session.user.email === ADMIN_EMAIL) {
           navigate("/admin");
-        } else {
+          return;
+        }
+
+        // Check profile
+        const { data: profile } = await supabase
+          .from("profiles")
+          .select("username, gender")
+          .eq("user_id", session.user.id)
+          .single();
+
+        if (profile?.username && profile?.gender) {
           navigate("/explore");
+        } else {
+          // Profile incomplete (e.g. Google sign up first time)
+          setShowSignupSteps(true);
         }
       }
-    });
+    };
+
+    checkUser();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === 'SIGNED_IN' && session) {
+          checkUser();
+        }
+      }
+    );
 
     return () => subscription.unsubscribe();
   }, [navigate]);
@@ -106,7 +119,7 @@ const Auth = () => {
   };
 
   if (showSignupSteps) {
-    return <SignupSteps email={email} onComplete={() => navigate("/explore")} />;
+    return <SignupSteps email={email} initialName={name} onComplete={() => navigate("/explore")} />;
   }
 
   return (
@@ -156,6 +169,21 @@ const Auth = () => {
 
         {/* Form */}
         <form onSubmit={isLogin ? handleLogin : handleSignup} className="space-y-4">
+          {!isLogin && (
+            <div className="relative">
+              <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+              <Input
+                type="text"
+                placeholder="الاسم الكامل"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                className="pl-12 pr-4 h-14 rounded-2xl bg-secondary border-0 text-right"
+                dir="rtl"
+                required
+              />
+            </div>
+          )}
+
           <div className="relative">
             <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
             <Input

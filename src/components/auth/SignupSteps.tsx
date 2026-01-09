@@ -14,16 +14,17 @@ import {
 
 interface SignupStepsProps {
   email: string;
+  initialName?: string;
   onComplete: () => void;
 }
 
-const SignupSteps = ({ email, onComplete }: SignupStepsProps) => {
+const SignupSteps = ({ email, initialName = "", onComplete }: SignupStepsProps) => {
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
   // Form data
-  const [username, setUsername] = useState("");
+  const [username, setUsername] = useState(initialName);
   const [gender, setGender] = useState<string>("");
   const [birthdate, setBirthdate] = useState("");
   const [referralSource, setReferralSource] = useState("");
@@ -68,9 +69,9 @@ const SignupSteps = ({ email, onComplete }: SignupStepsProps) => {
     }
 
     setLoading(true);
-    
+
     const { data: { user } } = await supabase.auth.getUser();
-    
+
     if (!user) {
       toast({
         title: "خطأ",
@@ -146,9 +147,8 @@ const SignupSteps = ({ email, onComplete }: SignupStepsProps) => {
       <header className="flex items-center justify-between px-4 py-4">
         <button
           onClick={handleBack}
-          className={`w-10 h-10 rounded-full bg-secondary flex items-center justify-center ${
-            step === 1 ? "opacity-50" : ""
-          }`}
+          className={`w-10 h-10 rounded-full bg-secondary flex items-center justify-center ${step === 1 ? "opacity-50" : ""
+            }`}
           disabled={step === 1}
         >
           <ArrowLeft className="w-5 h-5 text-foreground" />

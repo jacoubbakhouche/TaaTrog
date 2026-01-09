@@ -10,7 +10,7 @@ export interface BottomNavProps {
 const tabs = [
   { id: "investigator", label: "Investigator", icon: Briefcase, badge: "NEW", path: "/explore" },
   { id: "checkers", label: "Checkers", icon: Search, hasNotification: true, path: "/explore" },
-  { id: "account", label: "Account", icon: User, path: "/checker-profile" },
+  { id: "account", label: "Account", icon: User, path: "/profile" },
   { id: "messages", label: "Messages", icon: MessageSquare, hasNotification: true, path: "/messages" },
 ];
 
@@ -20,7 +20,7 @@ const BottomNav = ({ activeTab, onTabChange }: BottomNavProps) => {
 
   const getCurrentTab = () => {
     if (location.pathname === "/messages" || location.pathname.startsWith("/chat")) return "messages";
-    if (location.pathname === "/checker-profile") return "account";
+    if (location.pathname === "/profile") return "account";
     return activeTab || "checkers";
   };
 
