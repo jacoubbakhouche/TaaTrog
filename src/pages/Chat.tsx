@@ -75,7 +75,7 @@ const Chat = () => {
   const [conversationPrice, setConversationPrice] = useState<number>(0);
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isImChecker, setIsImChecker] = useState(false);
-  const [activationRequest, setActivationRequest] = useState<any>(null);
+  const [activationRequests, setActivationRequests] = useState<any[]>([]);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -85,7 +85,7 @@ const Chat = () => {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, activationRequest]); // Scroll when banner appears too
+  }, [messages, activationRequests]);
 
   useEffect(() => {
     const setupChat = async () => {
@@ -97,7 +97,7 @@ const Chat = () => {
       setCurrentUserId(user.id);
       setCurrentUserEmail(user.email || null);
 
-      // 1. Fetch Conversation Basic Info First (Robustness)
+      // 1. Fetch Conversation Basic Info First
       const { data: conv, error: convError } = await supabase
         .from("conversations")
         .select("id, user_id, checker_id, status, price")
@@ -115,36 +115,44 @@ const Chat = () => {
         return;
       }
 
-      // 2. Determine Role & Fetch Partner Details
+      // 2. Determine Role
       setConversationStatus(conv.status); // Set Status for Locking Logic
       setConversationPrice(conv.price || 0);
 
-      const imChecker = conv.checker_id && (
-        // We can't easily check if I am the checker without fetching checkers table, 
-        // but let's assume if user.id != conv.user_id, I am the checker
-        user.id !== conv.user_id
-      );
+      const imChecker = conv.checker_id && (user.id !== conv.user_id);
       setIsImChecker(!!imChecker);
 
       // 2.5 If Admin/Support, Check for Activation Requests
-      // 2.5 If Admin/Support, Check for Activation Requests
       if (imChecker) {
-        // Fetch any pending request for this user, regardless of exact conversation status matching strictly, 
-        // to be safe. But ideally we only check if this is the support chat.
-        // We know this IS the support chat context because imChecker is true (Admin) talking to User.
-        const { data: req, error: reqError } = await supabase
+        // Fetch ALL pending requests for this user
+        const { data: reqs } = await supabase
           .from('activation_requests')
           .select('*')
           .eq('user_id', conv.user_id)
           .eq('status', 'pending')
-          .order('created_at', { ascending: false })
-          .limit(1)
-          .maybeSingle();
+          .order('created_at', { ascending: false });
 
-        console.log("Admin Banner Debug:", { imChecker, status: conv.status, userId: conv.user_id, req, reqError });
+        console.log("Admin Banner Debug:", { imChecker, userId: conv.user_id, reqs });
 
-        if (req) {
-          setActivationRequest(req);
+        if (reqs && reqs.length > 0) {
+          setActivationRequests(reqs);
+        } else {
+          // Fallback: If no requests found, check for ANY pending conversation to support "old" flow or "missing request" flow
+          const { data: pendingConvs } = await supabase
+            .from('conversations')
+            .select('id')
+            .eq('user_id', conv.user_id)
+            .in('status', ['payment_pending', 'pending_approval'])
+            .neq('id', conversationId); // don't find self
+
+          if (pendingConvs && pendingConvs.length > 0) {
+            // Create fake request objects for the UI
+            setActivationRequests(pendingConvs.map(c => ({
+              id: `temp-${c.id}`,
+              conversation_id: c.id,
+              status: 'pending'
+            })));
+          }
         }
       }
 
@@ -410,113 +418,98 @@ const Chat = () => {
 
 
 
-      {/* Admin Activation Banner */}
-      {isImChecker && (conversationStatus === 'payment_negotiation' || activationRequest) && (
-        <div className="bg-yellow-50 md:bg-yellow-500/10 border-b border-yellow-200 p-4 flex flex-col sm:flex-row items-center justify-between gap-4 sticky top-[65px] z-10 backdrop-blur-md animate-in slide-in-from-top-2">
-          <div className="flex items-center gap-3">
-            <div className="bg-yellow-100 p-2 rounded-full">
-              <Shield className="w-5 h-5 text-yellow-600" />
+      {/* Admin Activation Banner - Simplified for One-Click Workflow */}
+      {isImChecker && (conversationStatus === 'payment_negotiation' || (activationRequests && activationRequests.length > 0)) && (
+        <div className="bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/10 dark:to-orange-900/10 border-b border-yellow-200/50 p-4 sticky top-[65px] z-10 backdrop-blur-xl shadow-sm animate-in slide-in-from-top-2">
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="bg-gradient-to-br from-yellow-400 to-orange-500 p-2.5 rounded-2xl shadow-lg shadow-orange-500/20">
+                <Shield className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h3 className="font-bold text-sm text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                  لوحة التحكم
+                  {activationRequests && activationRequests.length > 0 && (
+                    <span className="bg-red-100 text-red-600 text-[10px] px-2 py-0.5 rounded-full animate-pulse">
+                      يوجد طلب {activationRequests.length}
+                    </span>
+                  )}
+                </h3>
+                <p className="text-[11px] text-gray-500 dark:text-gray-400">تفعيل الدردشة للعميل والمختبر</p>
+              </div>
             </div>
-            <div>
-              <p className="font-bold text-sm text-yellow-900 dark:text-yellow-100">طلب تفعيل خدمة معلق</p>
-              <p className="text-xs text-yellow-700 dark:text-yellow-300">هذا المستخدم يريد تفعيل المحادثة رقم #{conversationId?.substring(0, 6)}</p>
-            </div>
+
+            {/* Subtle Delete Button */}
+            {(!activationRequests || activationRequests.length === 0) && (
+              <button
+                onClick={async () => {
+                  if (confirm("حذف هذه المحادثة؟")) {
+                    await supabase.from('conversations').delete().eq('id', conversationId);
+                    navigate('/messages');
+                  }
+                }}
+                className="mr-2 text-gray-400 hover:text-red-500 p-2 rounded-full hover:bg-red-50 transition-colors"
+                title="حذف التذكرة"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18" /><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6" /><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2" /></svg>
+              </button>
+            )}
           </div>
-          <Button
-            onClick={async () => {
-              try {
-                toast({ title: "جاري التفعيل...", description: "لحظات من فضلك" });
 
-                // 1. Find the Target Conversation
-                if (!clientUserId) {
-                  toast({ title: "خطأ", description: "بيانات العميل غير متوفرة", variant: "destructive" });
-                  return;
-                }
+          <div className="mt-4 w-full">
+            {activationRequests && activationRequests.length > 0 ? (
+              <div className="bg-white/60 dark:bg-gray-800/60 rounded-xl p-3 border border-yellow-100 dark:border-yellow-900/30 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-yellow-500 animate-pulse" />
+                  <p className="text-xs font-semibold text-gray-700 dark:text-gray-300">طلب تفعيل معلق</p>
+                </div>
 
-                let targetConvId: string | null = null;
-                let requestParams: any = null;
+                <Button
+                  size="sm"
+                  onClick={async () => {
+                    const req = activationRequests[0]; // Take the first one
+                    try {
+                      toast({ title: "جاري التفعيل...", description: "يتم فتح الدردشة للطرفين..." });
 
-                // A. Try looking up explicit request first
-                const { data: targetReq } = await supabase
-                  .from('activation_requests')
-                  .select('id, conversation_id')
-                  .eq('user_id', clientUserId)
-                  .eq('status', 'pending')
-                  .order('created_at', { ascending: false })
-                  .maybeSingle();
+                      // 1. Set Conversation to 'approved' (Unlock Mode)
+                      // This allows User & Tester to see the 'Start Chat' button
+                      const { error: updateError } = await supabase
+                        .from('conversations')
+                        .update({ status: 'approved' } as any)
+                        .eq('id', req.conversation_id);
 
-                if (targetReq) {
-                  targetConvId = targetReq.conversation_id;
-                  requestParams = targetReq;
-                } else {
-                  // B. Fallback: Search for ANY pending conversation for this user
-                  console.log("No specific request found, searching user's pending conversations...");
-                  const { data: pendingConv } = await supabase
-                    .from('conversations')
-                    .select('id')
-                    .eq('user_id', clientUserId)
-                    .in('status', ['payment_pending', 'pending_approval', 'payment_negotiation']) // Check all possible pending states
-                    .neq('id', conversationId) // Exclude current support chat
-                    .order('updated_at', { ascending: false })
-                    .limit(1)
-                    .maybeSingle();
+                      if (updateError) throw updateError;
 
-                  if (pendingConv) {
-                    targetConvId = pendingConv.id;
-                  }
-                }
+                      // 2. Approve Request
+                      await supabase.from('activation_requests').update({ status: 'approved' } as any).eq('id', req.id);
 
-                if (!targetConvId) {
-                  toast({ title: "خطأ", description: "لم يتم العثور على أي محادثة معلقة لهذا المستخدم.", variant: "destructive" });
-                  return;
-                }
+                      // 3. Notify Support Chat
+                      await supabase.from("messages").insert({
+                        conversation_id: conversationId,
+                        sender_id: currentUserId,
+                        content: `✅ تم قبول الطلب! ظهر زر "تأكيد البدء" للعميل والمختبر الآن.`
+                      });
 
-                // 2. Activate via Secure RPC (or direct update if RPC not available)
-                const { error: rpcError } = await supabase.rpc('admin_activate_conversation', {
-                  target_conversation_id: targetConvId
-                });
+                      toast({ title: "تم القبول!", description: "ينتظر الآن تأكيد العميل/المختبر للدخول." });
+                      setActivationRequests(prev => prev.slice(1));
 
-                if (rpcError) {
-                  console.warn("RPC failed, trying direct update:", rpcError);
-                  // Fallback to direct update if RPC permissions fail (Assuming Admin has RLS rights)
-                  const { error: directError } = await supabase
-                    .from('conversations')
-                    .update({ status: 'paid' } as any)
-                    .eq('id', targetConvId);
-
-                  if (directError) throw directError;
-
-                  // Also close request manually if exists
-                  if (requestParams?.id) {
-                    await supabase
-                      .from('activation_requests')
-                      .update({ status: 'approved' } as any)
-                      .eq('id', requestParams.id);
-                  }
-                }
-
-                // 3. Notify User in Chat
-                await supabase.from("messages").insert({
-                  conversation_id: conversationId,
-                  sender_id: currentUserId,
-                  content: `✅ تم تفعيل المحادثة رقم #${targetConvId.substring(0, 6)} بنجاح! يمكنك الآن العودة لتلك المحادثة.`
-                });
-
-                setConversationStatus('paid'); // Update local state
-                toast({ title: "تم التفعيل بنجاح! 🎉", description: "تم تفعيل خدمة العميل." });
-
-                // Refresh
-                setTimeout(() => window.location.reload(), 1500);
-
-              } catch (e) {
-                console.error(e);
-                toast({ title: "خطأ", description: "حدث خطأ أثناء التفعيل", variant: "destructive" });
-              }
-            }}
-            className="bg-green-600 hover:bg-green-700 text-white w-full sm:w-auto shadow-lg"
-          >
-            تفعيل المحادثة الآن ✅
-          </Button>
+                    } catch (e) {
+                      console.error(e);
+                      toast({ title: "خطأ", description: "فشل العملية" });
+                    }
+                  }}
+                  className="bg-black text-white hover:bg-gray-800 px-6 h-9 rounded-lg shadow-lg shadow-yellow-500/20"
+                >
+                  تفعيل الدردشة 🔓
+                </Button>
+              </div>
+            ) : (
+              <div className="text-center py-2">
+                <p className="text-[10px] text-gray-400">لا توجد طلبات معلقة حالياً</p>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -561,7 +554,7 @@ const Chat = () => {
 
       {/* Input or Status Message */}
       <div className="sticky bottom-0 bg-card border-t border-border p-3 safe-bottom z-10">
-        {["paid", "payment_negotiation", "completed", "approved"].includes(conversationStatus || "") ? (
+        {["paid", "payment_negotiation", "completed"].includes(conversationStatus || "") ? (
           <div className="flex items-center gap-2">
             <Input
               value={newMessage}
@@ -580,43 +573,52 @@ const Chat = () => {
               <Send className="w-5 h-5" />
             </Button>
           </div>
+        ) : conversationStatus === 'approved' ? (
+          // UNLOCKED STATE: Show "Start Chat" Button for User/Tester
+          <div className="p-4 bg-green-50/50 border border-green-200 rounded-xl text-center space-y-3">
+            <h3 className="text-green-800 font-bold">🎉 تمت الموافقة على الطلب!</h3>
+            <p className="text-xs text-green-600">اضغط على الزر أدناه للدخول إلى الدردشة وإرسال الرسائل.</p>
+            <Button
+              onClick={async () => {
+                try {
+                  const { error } = await supabase
+                    .from('conversations')
+                    .update({ status: 'paid' } as any) // Fully Activate
+                    .eq('id', conversationId);
+
+                  if (error) throw error;
+                  setConversationStatus('paid');
+                  toast({ title: "بدأت المحادثة!", description: "يمكنك الآن إرسال الرسائل." });
+                } catch (e) {
+                  toast({ title: "خطأ", description: "حدث خطأ" });
+                }
+              }}
+              className="w-full bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-500/30 animate-pulse"
+            >
+              تأكيد وبدء الدردشة 💬
+            </Button>
+          </div>
         ) : (
           <div className="p-4 rounded-xl bg-secondary/50 border border-border text-center">
             {isImChecker ? (
               // Checker/Admin View of Locked Chat
               currentUserEmail === ADMIN_EMAIL ? (
                 <div className="space-y-4">
-                  <p className="font-bold text-muted-foreground">هذه المحادثة بانتظار الدفع أو التفعيل 🔒</p>
-                  <p className="text-xs text-muted-foreground mb-3">بصفتك المشرف (Admin)، يمكنك تفعيل المحادثة فوراً.</p>
+                  <p className="font-bold text-muted-foreground">محادثة مغلقة 🔒</p>
                   <Button
                     onClick={async () => {
-                      try {
-                        toast({ title: "جاري التفعيل...", description: "يتم تفعيل المحادثة الآن" });
-                        const { error } = await supabase
-                          .from('conversations')
-                          .update({ status: 'paid' } as any)
-                          .eq('id', conversationId);
-
-                        if (error) throw error;
-
-                        setConversationStatus('paid');
-                        toast({ title: "تم التفعيل بنجاح ✅", description: "يمكنك الآن بدء الدردشة" });
-                        window.location.reload();
-                      } catch (e) {
-                        console.error(e);
-                        toast({ title: "خطأ", description: "فشل التفعيل", variant: "destructive" });
-                      }
+                      // Admin Override
+                      await supabase.from('conversations').update({ status: 'approved' } as any).eq('id', conversationId);
+                      setConversationStatus('approved');
                     }}
-                    className="w-full bg-green-600 hover:bg-green-700 text-white"
+                    className="w-full bg-gray-800 text-white"
                   >
-                    ✅ تفعيل المحادثة فوراً
+                    فك القفل (Admin Override)
                   </Button>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  <p className="font-bold text-muted-foreground">هذه المحادثة بانتظار الدفع أو التفعيل 🔒</p>
-                  <p className="text-sm text-muted-foreground">يجب على العميل إتمام الدفع وتفعيل المحادثة من قبل الإدارة.</p>
-                </div>
+                // Regular Checker in Locked Chat
+                <p className="text-sm text-muted-foreground">بانتظار تفعيل الإدارة... ⏳</p>
               )
             ) : (
               // Client View of Locked Chat
