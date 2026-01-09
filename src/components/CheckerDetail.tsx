@@ -129,7 +129,7 @@ const CheckerDetail = ({ checker, isOpen, onClose }: CheckerDetailProps) => {
         user_id: user.id,
         client_id: user.id, // Providing both as per suspected schema/types mismatch
         checker_id: checker.id,
-        status: "pending_approval",
+        status: "paid",
         price: checker.price || 0
       })
       .select()

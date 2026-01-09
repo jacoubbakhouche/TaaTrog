@@ -462,118 +462,26 @@ const Chat = () => {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input or Status Message */}
+      {/* Input Message - Always Open */}
       <div className="sticky bottom-0 bg-card border-t border-border p-3 safe-bottom z-10">
-        {["paid", "payment_negotiation", "completed"].includes(conversationStatus || "") ? (
-          <div className="flex items-center gap-2">
-            <Input
-              value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
-              onKeyPress={handleKeyPress}
-              placeholder="اكتب رسالتك..."
-              className="flex-1 bg-secondary border-0 rounded-full px-4"
-              dir="auto"
-            />
-            <Button
-              onClick={sendMessage}
-              disabled={!newMessage.trim() || sending}
-              size="icon"
-              className="rounded-full bg-primary hover:bg-primary/90 flex-shrink-0"
-            >
-              <Send className="w-5 h-5" />
-            </Button>
-          </div>
-        ) : conversationStatus === 'approved' ? (
-          // UNLOCKED STATE (Legacy or specific flow): Show "Start Chat" Button for User/Tester
-          <div className="p-4 bg-green-50/50 border border-green-200 rounded-xl text-center space-y-3">
-            <h3 className="text-green-800 font-bold">🎉 تمت الموافقة على الطلب!</h3>
-            <p className="text-xs text-green-600">اضغط على الزر أدناه للدخول إلى الدردشة وإرسال الرسائل.</p>
-            <Button
-              onClick={async () => {
-                try {
-                  const { error } = await supabase
-                    .from('conversations')
-                    .update({ status: 'paid' } as any) // Fully Activate
-                    .eq('id', conversationId);
-
-                  if (error) throw error;
-                  setConversationStatus('paid');
-                  toast({ title: "بدأت المحادثة!", description: "يمكنك الآن إرسال الرسائل." });
-                } catch (e) {
-                  toast({ title: "خطأ", description: "حدث خطأ" });
-                }
-              }}
-              className="w-full bg-green-600 hover:bg-green-700 text-white shadow-lg shadow-green-500/30 animate-pulse"
-            >
-              تأكيد وبدء الدردشة 💬
-            </Button>
-          </div>
-        ) : (
-          <div className="p-4 rounded-xl bg-secondary/50 border border-border text-center">
-            {isImChecker ? (
-              // Checker View of Locked Chat
-              conversationStatus === "pending_approval" ? (
-                <div className="space-y-4">
-                  <div className="space-y-1">
-                    <p className="font-bold text-base">لديك طلب جديد! 🔔</p>
-                    <p className="text-sm text-muted-foreground">يرغب العميل في بدء اختبار ولاء. هل تقبل؟</p>
-                  </div>
-                  <div className="flex gap-3">
-                    <Button
-                      onClick={async () => {
-                        // Checker Accepts -> Sets status to 'paid' (Active)
-                        try {
-                          const { error } = await supabase
-                            .from('conversations')
-                            .update({ status: 'paid' } as any)
-                            .eq('id', conversationId);
-
-                          if (error) throw error;
-                          setConversationStatus('paid');
-                          toast({ title: "تم قبول الطلب", description: "يمكنك الآن التحدث مع العميل." });
-                        } catch (e) {
-                          toast({ title: "خطأ", description: "فشل قبول الطلب", variant: "destructive" });
-                        }
-                      }}
-                      className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold"
-                    >
-                      قبول الطلب ✅
-                    </Button>
-                    <Button
-                      variant="outline"
-                      className="flex-1 text-red-500 border-red-200 hover:bg-red-50"
-                      onClick={async () => {
-                        // Reject logic if needed
-                        await supabase.from('conversations').update({ status: 'rejected' } as any).eq('id', conversationId);
-                        setConversationStatus('rejected');
-                        navigate('/messages');
-                      }}
-                    >
-                      رفض
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">هذه المحادثة مغلقة ({conversationStatus})</p>
-              )
-            ) : (
-              // Client View of Locked Chat
-              conversationStatus === "pending_approval" ? (
-                <div className="space-y-3 py-2">
-                  <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-2 animate-pulse">
-                    <Shield className="w-6 h-6 text-primary" />
-                  </div>
-                  <h3 className="font-bold text-foreground">بانتظار قبول المتحقق... ⏳</h3>
-                  <p className="text-xs text-muted-foreground max-w-xs mx-auto">
-                    تم إرسال طلبك إلى المتحقق. سيصلك إشعار فور قبوله للبدء في الدردشة.
-                  </p>
-                </div>
-              ) : (
-                <p className="text-sm text-muted-foreground">هذه المحادثة مغلقة ({conversationStatus})</p>
-              )
-            )}
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          <Input
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+            onKeyPress={handleKeyPress}
+            placeholder="اكتب رسالتك..."
+            className="flex-1 bg-secondary border-0 rounded-full px-4"
+            dir="auto"
+          />
+          <Button
+            onClick={sendMessage}
+            disabled={!newMessage.trim() || sending}
+            size="icon"
+            className="rounded-full bg-primary hover:bg-primary/90 flex-shrink-0"
+          >
+            <Send className="w-5 h-5" />
+          </Button>
+        </div>
       </div>
 
 
