@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, Check, Calendar } from "lucide-react";
+import { ArrowLeft, Check, User, Plus } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -26,8 +26,9 @@ const SignupSteps = ({ email, initialName = "", onComplete }: SignupStepsProps) 
   // Form data
   const [username, setUsername] = useState(initialName);
   const [gender, setGender] = useState<string>("");
-  const [birthdate, setBirthdate] = useState("");
-  const [referralSource, setReferralSource] = useState("");
+  const [age, setAge] = useState("");
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
 
   const totalSteps = 2;
 
@@ -43,29 +44,50 @@ const SignupSteps = ({ email, initialName = "", onComplete }: SignupStepsProps) 
     }
   };
 
-  const calculateAge = (birthDate: string): number => {
-    const today = new Date();
-    const birth = new Date(birthDate);
-    let age = today.getFullYear() - birth.getFullYear();
-    const monthDiff = today.getMonth() - birth.getMonth();
-    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
-      age--;
+
+
+  const uploadAvatar = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    try {
+      setUploading(true);
+      if (!event.target.files || event.target.files.length === 0) {
+        throw new Error("You must select an image to upload.");
+      }
+
+      const file = event.target.files[0];
+      const fileExt = file.name.split(".").pop();
+      const filePath = `${Math.random()}.${fileExt}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("avatars")
+        .upload(filePath, file);
+
+      if (uploadError) {
+        throw uploadError;
+      }
+
+      const { data } = supabase.storage.from("avatars").getPublicUrl(filePath);
+      setAvatarUrl(data.publicUrl);
+    } catch (error: any) {
+      toast({
+        title: "Error uploading avatar",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setUploading(false);
     }
-    return age;
   };
 
   const handleComplete = async () => {
     // Validate age
-    if (birthdate) {
-      const age = calculateAge(birthdate);
-      if (age < 18) {
-        toast({
-          title: "غير مسموح",
-          description: "يجب أن يكون عمرك 18 سنة أو أكثر",
-          variant: "destructive",
-        });
-        return;
-      }
+    const ageVal = parseInt(age);
+    if (!age || isNaN(ageVal) || ageVal < 18) {
+      toast({
+        title: "خطأ",
+        description: "يجب أن يكون العمر 18 أو أكبر",
+        variant: "destructive",
+      });
+      return;
     }
 
     setLoading(true);
@@ -82,25 +104,33 @@ const SignupSteps = ({ email, initialName = "", onComplete }: SignupStepsProps) 
       return;
     }
 
-    const age = birthdate ? calculateAge(birthdate) : null;
-
     const { error } = await supabase
       .from("profiles")
       .update({
         username,
         gender,
-        birthdate: birthdate || null,
-        age,
-        referral_source: referralSource || null,
+        age: ageVal,
+        avatar_url: avatarUrl,
+        // Sync full_name as well for consistency
+        full_name: username
       })
       .eq("user_id", user.id);
 
     if (error) {
-      toast({
-        title: "خطأ",
-        description: "فشل في حفظ البيانات",
-        variant: "destructive",
-      });
+      console.error("Profile update error:", error);
+      if (error.code === "23505") {
+        toast({
+          title: "اسم المستخدم مستخدم بالفعل",
+          description: "الرجاء اختيار اسم مستخدم آخر",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "خطأ",
+          description: "فشل في حفظ البيانات: " + error.message,
+          variant: "destructive",
+        });
+      }
     } else {
       toast({
         title: "تم بنجاح!",
@@ -116,23 +146,13 @@ const SignupSteps = ({ email, initialName = "", onComplete }: SignupStepsProps) 
       case 1:
         return username.length >= 3 && gender !== "";
       case 2:
-        return birthdate !== "" && referralSource !== "";
+        return age !== "" && parseInt(age) >= 18;
       default:
         return false;
     }
   };
 
-  const referralOptions = [
-    { value: "tiktok", label: "TikTok" },
-    { value: "instagram", label: "Instagram" },
-    { value: "youtube", label: "YouTube" },
-    { value: "facebook", label: "Facebook" },
-    { value: "google", label: "Google" },
-    { value: "press", label: "Press" },
-    { value: "ai", label: "AI" },
-    { value: "word_of_mouth", label: "Word-of-mouth" },
-    { value: "other", label: "Other" },
-  ];
+
 
   const genderOptions = [
     { value: "male", label: "Male" },
@@ -190,7 +210,7 @@ const SignupSteps = ({ email, initialName = "", onComplete }: SignupStepsProps) 
                 type="text"
                 placeholder="Type your username here"
                 value={username}
-                onChange={(e) => setUsername(e.target.value.toLowerCase().replace(/\s/g, ""))}
+                onChange={(e) => setUsername(e.target.value)}
                 className="h-12 border-0 border-b-2 border-primary/50 rounded-none bg-transparent focus:border-primary px-0 text-base"
               />
             </div>
@@ -200,68 +220,93 @@ const SignupSteps = ({ email, initialName = "", onComplete }: SignupStepsProps) 
               <label className="text-sm font-semibold text-foreground mb-2 block">
                 Gender
               </label>
-              <Select value={gender} onValueChange={setGender}>
-                <SelectTrigger className="h-12 rounded-xl bg-secondary border-0">
-                  <SelectValue placeholder="Select Your Gender" />
-                </SelectTrigger>
-                <SelectContent>
-                  {genderOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="grid grid-cols-2 gap-4">
+                <button
+                  onClick={() => setGender("male")}
+                  className={`h-12 rounded-xl border flex items-center justify-center gap-2 transition-all ${gender === "male"
+                    ? "bg-primary text-white border-primary"
+                    : "bg-secondary border-transparent hover:bg-secondary/80"
+                    }`}
+                >
+                  Male
+                </button>
+                <button
+                  onClick={() => setGender("female")}
+                  className={`h-12 rounded-xl border flex items-center justify-center gap-2 transition-all ${gender === "female"
+                    ? "bg-primary text-white border-primary"
+                    : "bg-secondary border-transparent hover:bg-secondary/80"
+                    }`}
+                >
+                  Female
+                </button>
+              </div>
             </div>
           </div>
         )}
 
-        {/* Step 2: Birthdate & Referral Source */}
+        {/* Step 2: Age & Avatar */}
         {step === 2 && (
           <div className="animate-in fade-in slide-in-from-right-4 duration-300">
             <h2 className="text-2xl font-bold text-primary mb-2 text-center">
-              Just one last step before we start!
+              Last details
             </h2>
             <p className="text-muted-foreground mb-8 text-center text-sm">
-              Last two questions before accessing Loyalty Tests
+              Please provide your age and a profile picture.
             </p>
 
-            {/* Birthdate */}
+            {/* Age */}
             <div className="mb-6">
               <label className="text-sm font-semibold text-foreground mb-1 block">
-                Your birthdate*
+                Your Age*
               </label>
               <span className="text-xs text-muted-foreground mb-2 block">
                 (must be 18+)
               </span>
-              <div className="relative">
-                <Input
-                  type="date"
-                  value={birthdate}
-                  onChange={(e) => setBirthdate(e.target.value)}
-                  className="h-12 border-0 border-b-2 border-primary/50 rounded-none bg-transparent focus:border-primary px-0 text-base"
-                  max={new Date(new Date().setFullYear(new Date().getFullYear() - 18)).toISOString().split('T')[0]}
-                />
-              </div>
+              <Input
+                type="number"
+                value={age}
+                onChange={(e) => setAge(e.target.value)}
+                placeholder="e.g. 24"
+                className="h-12 border-0 border-b-2 border-primary/50 rounded-none bg-transparent focus:border-primary px-0 text-base"
+                min={18}
+              />
             </div>
 
-            {/* Referral Source */}
-            <div className="mb-6">
-              <label className="text-sm font-semibold text-foreground mb-2 block">
-                How did you know about Lazo?
+            {/* Avatar Upload */}
+            <div className="mb-6 flex flex-col items-center">
+              <label className="text-sm font-semibold text-foreground mb-4 block self-start">
+                Profile Photo
               </label>
-              <Select value={referralSource} onValueChange={setReferralSource}>
-                <SelectTrigger className="h-12 rounded-xl bg-secondary border-0">
-                  <SelectValue placeholder="Select An Option" />
-                </SelectTrigger>
-                <SelectContent>
-                  {referralOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="relative">
+                <div className="w-24 h-24 rounded-full overflow-hidden bg-secondary border-2 border-border relative">
+                  {avatarUrl ? (
+                    <img
+                      src={avatarUrl}
+                      alt="Avatar"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center">
+                      <User className="w-10 h-10 text-muted-foreground" />
+                    </div>
+                  )}
+                  <label
+                    htmlFor="avatar-upload"
+                    className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity cursor-pointer"
+                  >
+                    <Plus className="w-8 h-8 text-white" />
+                  </label>
+                </div>
+                <input
+                  id="avatar-upload"
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={uploadAvatar}
+                  disabled={uploading}
+                />
+              </div>
+              {uploading && <p className="text-xs text-muted-foreground mt-2">Uploading...</p>}
             </div>
           </div>
         )}

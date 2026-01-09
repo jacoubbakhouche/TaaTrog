@@ -245,6 +245,24 @@ const Admin = () => {
 
       if (updateError) throw updateError;
 
+      // Sync Profile Data (Automatically update user profile with checker data)
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({
+          full_name: request.display_name,
+          age: request.age,
+          gender: request.gender,
+          // We don't sync phone to profiles as it might not have the column yet, 
+          // and avatar is separate.
+        })
+        .eq("user_id", request.user_id);
+
+      if (profileError) {
+        console.error("Error syncing profile:", profileError);
+        // We don't throw here to avoid blocking a successful approval, just log it.
+        toast.error("تم التفعيل لكن فشل تحديث الملف الشخصي");
+      }
+
       toast.success("تم قبول الطلب وتفعيل الحساب بنجاح");
       loadData(currentUser?.id);
     } catch (error) {
