@@ -411,7 +411,7 @@ const Chat = () => {
 
 
       {/* Admin Activation Banner */}
-      {isImChecker && conversationStatus === 'payment_negotiation' && (
+      {isImChecker && (conversationStatus === 'payment_negotiation' || activationRequest) && (
         <div className="bg-yellow-50 md:bg-yellow-500/10 border-b border-yellow-200 p-4 flex flex-col sm:flex-row items-center justify-between gap-4 sticky top-[65px] z-10 backdrop-blur-md animate-in slide-in-from-top-2">
           <div className="flex items-center gap-3">
             <div className="bg-yellow-100 p-2 rounded-full">
