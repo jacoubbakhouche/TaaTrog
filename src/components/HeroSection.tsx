@@ -35,7 +35,7 @@ export const HeroSection = () => {
 
                         {/* Subheadline */}
                         <p className="text-lg md:text-xl text-muted-foreground max-w-xl leading-relaxed">
-                            منصة "رابط الثقة" هي رفيقك الأمثل للجزم باليقين. نقدم لك شبكة من المحترفين للتحقق بذكاء، سرية، واحترافية مطلقة.
+                            منصة "TaaTrog" هي رفيقك الأمثل للجزم باليقين. نقدم لك شبكة من المحترفين للتحقق بذكاء، سرية، واحترافية مطلقة.
                         </p>
 
                         {/* CTA Buttons */}

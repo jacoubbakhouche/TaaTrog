@@ -9,7 +9,7 @@ export const Footer = () => {
                         <div className="w-10 h-10 rounded-xl bg-gradient-primary flex items-center justify-center">
                             <Shield className="w-6 h-6 text-white" />
                         </div>
-                        <span className="text-3xl font-black tracking-tighter text-gradient">رابط الثقة</span>
+                        <span className="text-3xl font-black tracking-tighter text-gradient">TaaTrog</span>
                     </div>
                     <p className="text-muted-foreground font-medium max-w-md ml-auto md:ml-0 leading-relaxed text-right">
                         المنصة العالمية الرائدة في مجال التحقق الرقمي وخدمات الثقة. نحن نؤمن بأن الحقيقة هي حق للجميع، ونعمل يومياً لتمكينكم من الوصول إليها بأعلى درجات الخصوصية.

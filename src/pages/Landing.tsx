@@ -70,7 +70,7 @@ const Landing = () => {
 
             {/* Header / Skip */}
             <div className="absolute top-0 right-0 left-0 p-6 z-50 flex justify-between items-center">
-                <div className="text-xl font-bold text-white tracking-widest">رابط الثقة</div>
+                <div className="text-xl font-bold text-white tracking-widest">TaaTrog</div>
                 {currentIndex < 2 && (
                     <button onClick={() => navigate('/auth')} className="text-white/60 hover:text-white transition-colors text-sm font-medium">
                         تخطي

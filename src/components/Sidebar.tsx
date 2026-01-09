@@ -120,7 +120,7 @@ const Sidebar = ({ isOpen, onClose }: SidebarProps) => {
             <div className="w-8 h-8 rounded-lg bg-sidebar-foreground flex items-center justify-center">
               <span className="text-sidebar font-bold text-lg">T</span>
             </div>
-            <span className="text-sidebar-foreground font-bold text-xl">رابط الثقة</span>
+            <span className="text-sidebar-foreground font-bold text-xl">TaaTrog</span>
           </button>
           <button
             onClick={onClose}

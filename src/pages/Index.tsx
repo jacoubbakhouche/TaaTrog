@@ -156,7 +156,7 @@ const Index = () => {
         <header className="sticky top-0 bg-card/95 backdrop-blur-md z-30 border-b border-border">
           <div className="flex items-center justify-between px-4 py-3">
             <Skeleton className="w-12 h-12 rounded-full" />
-            <div className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-primary to-purple-600">رابط الثقة</div>
+            <div className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-primary to-purple-600">TaaTrog</div>
             <Skeleton className="w-12 h-12 rounded-full" />
           </div>
         </header>
@@ -205,7 +205,7 @@ const Index = () => {
 
           {/* Logo / Brand Name */}
           <div className="text-xl font-bold bg-gradient-to-r from-primary to-purple-600 bg-clip-text text-transparent">
-            رابط الثقة
+            TaaTrog
           </div>
 
           {/* Filter Button */}

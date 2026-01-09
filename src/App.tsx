@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import Landing from "./pages/Landing";
 import Auth from "./pages/Auth";
+import Terms from "./pages/Terms";
 import CheckerProfile from "./pages/CheckerProfile";
 import BecomeChecker from "./pages/BecomeChecker";
 import Admin from "./pages/Admin";
@@ -30,6 +31,7 @@ const App = () => (
             <Route path="/" element={<Landing />} />
             <Route path="/explore" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
+            <Route path="/terms" element={<Terms />} />
             <Route path="/checker-profile" element={<CheckerProfile />} />
             <Route path="/become-checker" element={<BecomeChecker />} />
             <Route path="/profile" element={<ClientProfile />} />

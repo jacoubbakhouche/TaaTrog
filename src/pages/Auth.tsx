@@ -1,8 +1,9 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useToast } from "@/hooks/use-toast";
 import { Eye, EyeOff, ArrowLeft, Mail, Lock } from "lucide-react";
 import SignupSteps from "@/components/auth/SignupSteps";
@@ -16,6 +17,7 @@ const Auth = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showSignupSteps, setShowSignupSteps] = useState(false);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -69,6 +71,16 @@ const Auth = () => {
 
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (!agreedToTerms) {
+      toast({
+        title: "تنبيه",
+        description: "يجب الموافقة على الشروط والأحكام للمتابعة",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setLoading(true);
 
     const { error } = await supabase.auth.signUp({
@@ -114,7 +126,7 @@ const Auth = () => {
       <div className="flex-1 flex flex-col px-6 pt-8">
         {/* Logo/Title */}
         <div className="text-center mb-10">
-          <h1 className="text-3xl font-bold text-foreground mb-2">TrustCheck</h1>
+          <h1 className="text-3xl font-bold text-foreground mb-2">TaaTrog</h1>
           <p className="text-muted-foreground">
             {isLogin ? "مرحباً بعودتك" : "أنشئ حسابك الجديد"}
           </p>
@@ -191,6 +203,20 @@ const Auth = () => {
             </button>
           )}
 
+          {!isLogin && (
+            <div className="flex items-start gap-3 pt-2" dir="rtl">
+              <Checkbox
+                id="terms"
+                checked={agreedToTerms}
+                onCheckedChange={(c) => setAgreedToTerms(c as boolean)}
+                className="mt-1"
+              />
+              <label htmlFor="terms" className="text-sm text-muted-foreground leading-tight cursor-pointer">
+                أوافق على <Link to="/terms" className="text-primary font-bold hover:underline">الشروط والأحكام</Link> وسياسة الخصوصية
+              </label>
+            </div>
+          )}
+
           <Button
             type="submit"
             variant="gradient"
@@ -255,6 +281,9 @@ const Auth = () => {
             </svg>
             المتابعة مع Google
           </Button>
+          <p className="text-[10px] text-center text-muted-foreground w-full px-4 pt-1">
+            عند المتابعة باستخدام Google، فإنك توافق تلقائياً على الشروط والأحكام.
+          </p>
         </div>
       </div>
     </div>
