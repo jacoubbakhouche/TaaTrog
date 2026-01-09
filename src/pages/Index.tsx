@@ -150,39 +150,44 @@ const Index = () => {
   };
 
   if (loading) {
-    <div className="min-h-screen bg-background pb-24">
-      {/* Header Skeleton */}
-      <header className="sticky top-0 bg-card/95 backdrop-blur-md z-30 border-b border-border">
-        <div className="flex items-center justify-between px-4 py-3">
-          <Skeleton className="w-12 h-12 rounded-full" />
-          <div className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-primary to-purple-600">رابط الثقة</div>
-          <Skeleton className="w-12 h-12 rounded-full" />
-        </div>
-      </header>
+    return (
+      <div className="min-h-screen bg-background pb-24">
+        {/* Header Skeleton */}
+        <header className="sticky top-0 bg-card/95 backdrop-blur-md z-30 border-b border-border">
+          <div className="flex items-center justify-between px-4 py-3">
+            <Skeleton className="w-12 h-12 rounded-full" />
+            <div className="text-xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-primary to-purple-600">رابط الثقة</div>
+            <Skeleton className="w-12 h-12 rounded-full" />
+          </div>
+        </header>
 
-      <main className="px-4 py-8">
-        <div className="flex items-center justify-between mb-6">
-          <Skeleton className="h-8 w-48" />
-          <Skeleton className="h-8 w-20" />
-        </div>
+        <main className="px-4 py-8">
+          <div className="flex items-center justify-between mb-6">
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-8 w-20" />
+          </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          {[1, 2, 3, 4, 5, 6].map((i) => (
-            <div key={i} className="bg-card rounded-2xl border border-border overflow-hidden h-64 flex flex-col">
-              <Skeleton className="w-full h-32" />
-              <div className="p-3 space-y-2 flex-1">
-                <Skeleton className="h-4 w-3/4" />
-                <Skeleton className="h-3 w-1/2" />
-                <div className="mt-auto pt-2 flex justify-between">
-                  <Skeleton className="h-6 w-16 rounded-full" />
-                  <Skeleton className="h-6 w-6 rounded-full" />
+          <div className="grid grid-cols-2 gap-3">
+            {[1, 2, 3, 4, 5, 6].map((i) => (
+              <div key={i} className="relative rounded-2xl overflow-hidden bg-card shadow-card aspect-[3/4]">
+                <Skeleton className="w-full h-full" />
+
+                {/* Info Overlay Skeleton */}
+                <div className="absolute bottom-0 left-0 right-0 p-3 space-y-2 z-10">
+                  <Skeleton className="h-5 w-1/2 bg-white/20" />
+                  <Skeleton className="h-3 w-1/4 bg-white/20" />
+                </div>
+
+                {/* Tests Badge Skeleton */}
+                <div className="absolute bottom-3 right-3">
+                  <Skeleton className="h-6 w-16 rounded-full bg-white/20" />
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
-      </main>
-    </div>
+            ))}
+          </div>
+        </main>
+      </div>
+    );
   }
 
   return (
