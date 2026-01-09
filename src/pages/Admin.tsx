@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   ArrowLeft, Check, X, Clock, User, Calendar, Globe, MessageSquare,
-  Users, Shield, FileText, BarChart3, Settings, Power, PowerOff
+  Users, Shield, FileText, BarChart3, Settings, Power, PowerOff, Phone
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -23,6 +23,7 @@ interface CheckerRequest {
   gender: string;
   languages: string[];
   social_media: Record<string, string>;
+  phone: string | null;
   experience: string | null;
   status: string;
   created_at: string;
@@ -544,6 +545,13 @@ const Admin = () => {
                             <div className="flex items-start gap-2">
                               <MessageSquare className="w-4 h-4 text-muted-foreground mt-0.5" />
                               <p className="text-sm text-muted-foreground">{request.experience}</p>
+                            </div>
+                          )}
+
+                          {request.phone && (
+                            <div className="flex items-center gap-2 text-sm font-medium bg-secondary/50 p-2 rounded-lg">
+                              <Phone className="w-4 h-4 text-primary" />
+                              <span dir="ltr">{request.phone}</span>
                             </div>
                           )}
 
