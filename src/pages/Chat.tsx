@@ -427,42 +427,85 @@ const Chat = () => {
               try {
                 toast({ title: "جاري التفعيل...", description: "لحظات من فضلك" });
 
-                // 1. Find the Target Conversation from Request
+                // 1. Find the Target Conversation
                 if (!clientUserId) {
                   toast({ title: "خطأ", description: "بيانات العميل غير متوفرة", variant: "destructive" });
                   return;
                 }
-                const { data: targetReq, error: findError } = await supabase
+
+                let targetConvId: string | null = null;
+                let requestParams: any = null;
+
+                // A. Try looking up explicit request first
+                const { data: targetReq } = await supabase
                   .from('activation_requests')
                   .select('id, conversation_id')
-                  .eq('user_id', clientUserId) // Use stored client ID
+                  .eq('user_id', clientUserId)
                   .eq('status', 'pending')
                   .order('created_at', { ascending: false })
                   .maybeSingle();
 
-                if (findError || !targetReq) {
-                  toast({ title: "خطأ", description: "لم يتم العثور على طلب التفعيل المرتبط.", variant: "destructive" });
+                if (targetReq) {
+                  targetConvId = targetReq.conversation_id;
+                  requestParams = targetReq;
+                } else {
+                  // B. Fallback: Search for ANY pending conversation for this user
+                  console.log("No specific request found, searching user's pending conversations...");
+                  const { data: pendingConv } = await supabase
+                    .from('conversations')
+                    .select('id')
+                    .eq('user_id', clientUserId)
+                    .in('status', ['payment_pending', 'pending_approval', 'payment_negotiation']) // Check all possible pending states
+                    .neq('id', conversationId) // Exclude current support chat
+                    .order('updated_at', { ascending: false })
+                    .limit(1)
+                    .maybeSingle();
+
+                  if (pendingConv) {
+                    targetConvId = pendingConv.id;
+                  }
+                }
+
+                if (!targetConvId) {
+                  toast({ title: "خطأ", description: "لم يتم العثور على أي محادثة معلقة لهذا المستخدم.", variant: "destructive" });
                   return;
                 }
 
-                // 2. Activate via Secure RPC
+                // 2. Activate via Secure RPC (or direct update if RPC not available)
                 const { error: rpcError } = await supabase.rpc('admin_activate_conversation', {
-                  target_conversation_id: targetReq.conversation_id
+                  target_conversation_id: targetConvId
                 });
 
-                if (rpcError) throw rpcError;
+                if (rpcError) {
+                  console.warn("RPC failed, trying direct update:", rpcError);
+                  // Fallback to direct update if RPC permissions fail (Assuming Admin has RLS rights)
+                  const { error: directError } = await supabase
+                    .from('conversations')
+                    .update({ status: 'paid' } as any)
+                    .eq('id', targetConvId);
+
+                  if (directError) throw directError;
+
+                  // Also close request manually if exists
+                  if (requestParams?.id) {
+                    await supabase
+                      .from('activation_requests')
+                      .update({ status: 'approved' } as any)
+                      .eq('id', requestParams.id);
+                  }
+                }
 
                 // 3. Notify User in Chat
                 await supabase.from("messages").insert({
                   conversation_id: conversationId,
                   sender_id: currentUserId,
-                  content: `✅ تم تفعيل المحادثة رقم #${targetReq.conversation_id.substring(0, 6)} بنجاح! يمكنك الآن العودة لتلك المحادثة.`
+                  content: `✅ تم تفعيل المحادثة رقم #${targetConvId.substring(0, 6)} بنجاح! يمكنك الآن العودة لتلك المحادثة.`
                 });
 
                 setConversationStatus('paid'); // Update local state
                 toast({ title: "تم التفعيل بنجاح! 🎉", description: "تم تفعيل خدمة العميل." });
 
-                // Optional: Reload
+                // Refresh
                 setTimeout(() => window.location.reload(), 1500);
 
               } catch (e) {

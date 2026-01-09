@@ -121,6 +121,22 @@ export const PaymentModal = ({ isOpen, onClose, bookingId, price, onPaymentSucce
 
             if (error) throw error;
 
+            // NEW: Create Activation Request
+            const { data: currentConv } = await supabase
+                .from('conversations')
+                .select('checker_id')
+                .eq('id', bookingId)
+                .single();
+
+            if (currentConv) {
+                await supabase.from('activation_requests').insert({
+                    user_id: user.id,
+                    conversation_id: bookingId,
+                    checker_id: currentConv.checker_id,
+                    status: 'pending'
+                });
+            }
+
             toast.success("تم رفع الإيصال. بانتظار مراجعة الإدارة.");
             onClose();
         } catch (error) {
@@ -257,6 +273,22 @@ export const PaymentModal = ({ isOpen, onClose, bookingId, price, onPaymentSucce
                                                 conversation_id: targetConvId,
                                                 sender_id: user.id, // User sends message
                                                 content: "السلام عليكم، أرغب في إتمام الدفع عن طريق BaridiMob / CCP. أرجو تزويدي بالمعلومات."
+                                            });
+                                        }
+
+                                        // NEW: Create Activation Request
+                                        const { data: bookingConv } = await supabase
+                                            .from('conversations')
+                                            .select('checker_id')
+                                            .eq('id', bookingId)
+                                            .single();
+
+                                        if (bookingConv) {
+                                            await supabase.from('activation_requests').insert({
+                                                user_id: user.id,
+                                                conversation_id: bookingId,
+                                                checker_id: bookingConv.checker_id,
+                                                status: 'pending'
                                             });
                                         }
 
